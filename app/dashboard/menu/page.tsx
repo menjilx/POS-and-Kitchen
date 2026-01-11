@@ -20,17 +20,21 @@ export default async function MenuPage() {
     redirect('/dashboard')
   }
 
-  const { data: menuItems } = await supabase
-    .from('menu_items')
-    .select('*')
-    .eq('tenant_id', userData.tenant_id)
-    .order('name')
-
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('settings')
-    .eq('id', userData.tenant_id)
-    .single()
+  const [
+    { data: menuItems },
+    { data: tenantData }
+  ] = await Promise.all([
+    supabase
+      .from('menu_items')
+      .select('*')
+      .eq('tenant_id', userData.tenant_id)
+      .order('name'),
+    supabase
+      .from('tenants')
+      .select('settings')
+      .eq('id', userData.tenant_id)
+      .single()
+  ])
 
   const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
   const currency = tenantSettings?.currency ?? 'USD'

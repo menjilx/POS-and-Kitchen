@@ -94,38 +94,101 @@ export default function POSPage() {
       .single()
 
     if (!userData?.tenant_id) return
-    setTenantId(userData.tenant_id)
+    const tenantId = userData.tenant_id
+    setTenantId(tenantId)
 
-    // Fetch default Walk-in customer
-    const { data: walkIn } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('tenant_id', userData.tenant_id)
-      .eq('name', 'Walk-in')
-      .single()
-    
+    const [
+        { data: walkIn },
+        { data: displays },
+        { data: session },
+        { data: tenantData },
+        { data: discountsRes },
+        { data: menuRes },
+        { data: tablesRes },
+        { data: kdsRes },
+        { data: heldSales }
+    ] = await Promise.all([
+        // Fetch default Walk-in customer
+        supabase
+          .from('customers')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('name', 'Walk-in')
+          .single(),
+        
+        // Fetch Kitchen Displays
+        supabase
+          .from('kitchen_displays')
+          .select('id, name')
+          .eq('tenant_id', tenantId),
+
+        // Check for open cashier session
+        supabase
+          .from('cashier_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'open')
+          .single(),
+
+        // Fetch tenant settings for tax rate
+        supabase
+          .from('tenants')
+          .select('settings')
+          .eq('id', tenantId)
+          .single(),
+
+        // Fetch Discounts
+        supabase
+          .from('discounts')
+          .select('*')
+          .eq('tenant_id', tenantId)
+          .eq('is_active', true)
+          .order('name'),
+
+        // Fetch Menu Items
+        supabase
+          .from("menu_items")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("status", "active")
+          .order("name"),
+
+        // Fetch Tables
+        supabase
+          .from("tables")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .in("status", ["available", "reserved"])
+          .order("table_number"),
+
+        // Fetch Active Orders (KDS)
+        supabase
+          .from("kds_orders")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .in("status", ["pending", "preparing", "ready"])
+          .order("created_at", { ascending: false }),
+
+        // Fetch Held Orders
+        supabase
+          .from("sales")
+          .select("*, sale_items(quantity)")
+          .eq("tenant_id", tenantId)
+          .eq("payment_status", "pending")
+          .order("created_at", { ascending: false })
+    ])
+
+    // Process Walk-in
     if (walkIn) {
       setSelectedCustomer(walkIn)
     }
 
-    // Fetch Kitchen Displays
-    const { data: displays } = await supabase
-      .from('kitchen_displays')
-      .select('id, name')
-      .eq('tenant_id', userData.tenant_id)
-    
+    // Process Displays
     if (displays) {
         setKitchenDisplays(displays)
     }
 
-    // Check for open cashier session
-    const { data: session } = await supabase
-      .from('cashier_sessions')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('status', 'open')
-      .single()
-    
+    // Process Session
     if (session) {
       setCashierSession(session)
     } else {
@@ -133,36 +196,16 @@ export default function POSPage() {
       setShowRegisterModal(true)
     }
 
-    // Fetch tenant settings for tax rate
-    const { data: tenantData } = await supabase
-      .from('tenants')
-      .select('settings')
-      .eq('id', userData.tenant_id)
-      .single()
-
+    // Process Tenant Settings
     if (tenantData?.settings && typeof tenantData.settings === 'object' && 'tax_rate' in tenantData.settings) {
        // eslint-disable-next-line @typescript-eslint/no-explicit-any
        setTaxRate(Number((tenantData.settings as any).tax_rate) || 0)
     }
 
-    // Fetch Discounts
-    const { data: discountsRes } = await supabase
-      .from('discounts')
-      .select('*')
-      .eq('tenant_id', userData.tenant_id)
-      .eq('is_active', true)
-      .order('name')
-    
+    // Process Discounts
     if (discountsRes) setDiscounts(discountsRes as Discount[])
 
-    // Fetch Menu Items
-    const { data: menuRes } = await supabase
-      .from("menu_items")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .eq("status", "active")
-      .order("name")
-    
+    // Process Menu Items
     if (menuRes) {
       setMenuItems(menuRes)
       // Extract categories
@@ -170,24 +213,10 @@ export default function POSPage() {
       setCategories(uniqueCategories)
     }
 
-    // Fetch Tables
-    const { data: tablesRes } = await supabase
-      .from("tables")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .in("status", ["available", "reserved"])
-      .order("table_number")
-    
+    // Process Tables
     if (tablesRes) setTables(tablesRes)
 
-    // Fetch Active Orders (KDS)
-    const { data: kdsRes } = await supabase
-      .from("kds_orders")
-      .select("*")
-      .eq("tenant_id", userData.tenant_id)
-      .in("status", ["pending", "preparing", "ready"])
-      .order("created_at", { ascending: false })
-
+    // Process Active Orders (KDS)
     if (kdsRes && kdsRes.length > 0) {
         const saleIds = kdsRes.map(k => k.sale_id)
         const { data: salesRes } = await supabase
@@ -217,46 +246,43 @@ export default function POSPage() {
         setActiveOrders([])
     }
 
-    // Fetch Held Orders
-    const { data: heldSales } = await supabase
-        .from("sales")
-        .select("*, sale_items(quantity)")
-        .eq("tenant_id", userData.tenant_id)
-        .eq("payment_status", "pending")
-        .order("created_at", { ascending: false })
-    
+    // Process Held Orders
     if (heldSales) {
         // Fetch KDS status for these sales
         const saleIds = heldSales.map(s => s.id)
-        const { data: kdsStatus } = await supabase
-            .from("kds_orders")
-            .select("sale_id, status")
-            .in("sale_id", saleIds)
-            
-        const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]))
+        if (saleIds.length > 0) {
+            const { data: kdsStatus } = await supabase
+                .from("kds_orders")
+                .select("sale_id, status")
+                .in("sale_id", saleIds)
+                
+            const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]))
 
-        const held: HeldOrder[] = heldSales.map(s => {
-            let name = "Guest"
-            if (s.notes?.startsWith("Customer: ")) {
-                name = s.notes.replace("Customer: ", "")
-                // Remove note part if exists for display
-                if (name.includes(" | Note: ")) {
-                    name = name.split(" | Note: ")[0]
+            const held: HeldOrder[] = heldSales.map(s => {
+                let name = "Guest"
+                if (s.notes?.startsWith("Customer: ")) {
+                    name = s.notes.replace("Customer: ", "")
+                    // Remove note part if exists for display
+                    if (name.includes(" | Note: ")) {
+                        name = name.split(" | Note: ")[0]
+                    }
                 }
-            }
-            return {
-                id: s.id,
-                orderNumber: s.order_number,
-                customerName: name,
-                totalAmount: s.total_amount,
-                date: new Date(s.sale_date).toLocaleDateString(),
-                time: s.sale_time,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                itemsCount: s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
-                status: statusMap.get(s.id)
-            }
-        })
-        setHeldOrders(held)
+                return {
+                    id: s.id,
+                    orderNumber: s.order_number,
+                    customerName: name,
+                    totalAmount: s.total_amount,
+                    date: new Date(s.sale_date).toLocaleDateString(),
+                    time: s.sale_time,
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    itemsCount: s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
+                    status: statusMap.get(s.id)
+                }
+            })
+            setHeldOrders(held)
+        } else {
+            setHeldOrders([])
+        }
     }
   }
 

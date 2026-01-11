@@ -1,22 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { Plus, Trash2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
-
-interface Tenant {
-  id: string
-  name: string
-  email: string
-  user_count: number
-  total_sales: number
-  is_suspended: boolean
-  suspension_reason: string | null
-  suspended_at: string | null
-  created_at: string
-  currency?: string
-}
+import { DataTable } from '@/components/data-table'
+import { getColumns, Tenant } from './columns'
 
 type TenantSettingsRow = {
   id: string
@@ -31,11 +20,7 @@ export default function AdminTenantsPage() {
   const [suspendReason, setSuspendReason] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
-  useEffect(() => {
-    loadTenants()
-  }, [])
-
-  const loadTenants = async () => {
+  const loadTenants = useCallback(async () => {
     setLoading(true)
     try {
       const { data, error } = await supabase.rpc('get_all_tenants')
@@ -67,7 +52,11 @@ export default function AdminTenantsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadTenants()
+  }, [loadTenants])
 
   const handleSuspend = async () => {
     if (!selectedTenant || !suspendReason) return
@@ -89,7 +78,7 @@ export default function AdminTenantsPage() {
     }
   }
 
-  const handleReactivate = async (tenantId: string) => {
+  const handleReactivate = useCallback(async (tenantId: string) => {
     try {
       const { error } = await supabase.rpc('reactivate_tenant', {
         p_tenant_id: tenantId,
@@ -101,7 +90,19 @@ export default function AdminTenantsPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to reactivate tenant')
     }
-  }
+  }, [loadTenants])
+
+  const columns = useMemo(() => getColumns(
+    (tenant) => {
+      setSelectedTenant(tenant)
+      setShowSuspendModal(true)
+    },
+    handleReactivate,
+    (tenant) => {
+      setSelectedTenant(tenant)
+      setShowDeleteModal(true)
+    }
+  ), [handleReactivate])
 
   const handleDelete = async () => {
     if (!selectedTenant) return
@@ -147,76 +148,7 @@ export default function AdminTenantsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
         </div>
       ) : (
-        <div className="bg-card rounded-lg border">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-4">Restaurant</th>
-                <th className="text-left p-4">Email</th>
-                <th className="text-left p-4">Users</th>
-                <th className="text-left p-4">Sales</th>
-                <th className="text-left p-4">Status</th>
-                <th className="text-left p-4">Created</th>
-                <th className="text-left p-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenants.map((tenant) => (
-                <tr key={tenant.id} className="border-b hover:bg-accent">
-                  <td className="p-4 font-medium">{tenant.name}</td>
-                  <td className="p-4">{tenant.email}</td>
-                  <td className="p-4">{tenant.user_count}</td>
-                  <td className="p-4">{formatCurrency(tenant.total_sales || 0, tenant.currency ?? 'USD')}</td>
-                  <td className="p-4">
-                    {tenant.is_suspended ? (
-                      <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
-                        Suspended
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                        Active
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {new Date(tenant.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="p-4">
-                    <div className="flex gap-2">
-                      {!tenant.is_suspended ? (
-                        <button
-                          onClick={() => {
-                            setSelectedTenant(tenant)
-                            setShowSuspendModal(true)
-                          }}
-                          className="text-destructive hover:underline text-sm"
-                        >
-                          Suspend
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleReactivate(tenant.id)}
-                          className="text-primary hover:underline text-sm"
-                        >
-                          Reactivate
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setSelectedTenant(tenant)
-                          setShowDeleteModal(true)
-                        }}
-                        className="text-destructive hover:underline text-sm"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={columns} data={tenants} />
       )}
 
       {showSuspendModal && selectedTenant && (

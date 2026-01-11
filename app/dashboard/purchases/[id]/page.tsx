@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { ArrowLeft, FileText, Calendar, Building, Paperclip, Download, Edit } from 'lucide-react'
 import type { PurchaseItem, Ingredient, Location } from '@/types/database'
 
+import { PurchaseItemsTable } from './items-table'
+import type { PurchaseItemWithDetails } from './columns'
+
 type PurchaseAttachment = {
   id: string
   file_name: string
@@ -12,11 +15,6 @@ type PurchaseAttachment = {
   file_type: string
   file_size: number
   created_at: string
-}
-
-type PurchaseItemWithDetails = PurchaseItem & {
-  ingredients: Pick<Ingredient, 'name' | 'unit'> | null
-  locations: Pick<Location, 'name'> | null
 }
 
 export default async function PurchaseDetailsPage({
@@ -111,36 +109,8 @@ export default async function PurchaseDetailsPage({
             <div className="p-6 border-b">
               <h2 className="text-xl font-bold">Items</h2>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-muted/50">
-                    <th className="text-left p-4 font-medium">Ingredient</th>
-                    <th className="text-left p-4 font-medium">Location</th>
-                    <th className="text-right p-4 font-medium">Quantity</th>
-                    <th className="text-right p-4 font-medium">Unit Price</th>
-                    <th className="text-right p-4 font-medium">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {purchase.purchase_items?.map((item: PurchaseItemWithDetails) => (
-                    <tr key={item.id} className="border-t hover:bg-muted/50">
-                      <td className="p-4">
-                        <div className="font-medium">{item.ingredients?.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.ingredients?.unit}</div>
-                      </td>
-                      <td className="p-4 text-sm">{item.locations?.name}</td>
-                      <td className="p-4 text-right">{Number(item.quantity)}</td>
-                      <td className="p-4 text-right">
-                        {formatCurrency(Number(item.unit_price), currency)}
-                      </td>
-                      <td className="p-4 text-right font-medium">
-                        {formatCurrency(Number(item.quantity) * Number(item.unit_price), currency)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="p-6">
+              <PurchaseItemsTable data={purchase.purchase_items as PurchaseItemWithDetails[]} currency={currency} />
             </div>
           </div>
 

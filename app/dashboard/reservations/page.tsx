@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { DataTable } from '@/components/data-table'
+import { columns } from './columns'
 
 export default async function ReservationsPage() {
   const supabase = await createClient()
@@ -43,67 +45,7 @@ export default async function ReservationsPage() {
         </Link>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Customer</th>
-              <th className="text-left p-4">Party Size</th>
-              <th className="text-left p-4">Table</th>
-              <th className="text-left p-4">Time</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reservations?.map((reservation) => (
-              <tr key={reservation.id} className="border-b hover:bg-accent">
-                <td className="p-4">
-                  <div>
-                    <p className="font-medium">{reservation.customer_name}</p>
-                    <p className="text-sm text-muted-foreground">{reservation.customer_phone}</p>
-                  </div>
-                </td>
-                <td className="p-4">{reservation.party_size}</td>
-                <td className="p-4">
-                  {reservation.tables ? `Table ${reservation.tables.table_number}` : '-'}
-                </td>
-                <td className="p-4">
-                  <div>
-                    <p className="font-medium">
-                      {new Date(reservation.reservation_time).toLocaleString()}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{reservation.duration_minutes} min</p>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      reservation.status === 'confirmed'
-                        ? 'bg-green-100 text-green-800'
-                        : reservation.status === 'pending'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : reservation.status === 'seated'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {reservation.status}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <Link
-                    href={`/dashboard/reservations/${reservation.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={reservations || []} />
     </div>
   )
 }

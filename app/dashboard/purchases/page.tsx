@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { PurchasesTable } from './purchases-table'
+import type { Purchase } from './columns'
 
 export default async function PurchasesPage() {
   const supabase = await createClient()
@@ -18,7 +19,7 @@ export default async function PurchasesPage() {
 
   if (!userData) redirect('/login')
 
-  const { data: purchases } = await supabase
+  const { data: purchasesData } = await supabase
     .from('purchases')
     .select(`
       *,
@@ -41,6 +42,8 @@ export default async function PurchasesPage() {
   const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
   const currency = tenantSettings?.currency ?? 'USD'
 
+  const purchases = (purchasesData || []) as unknown as Purchase[]
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -53,45 +56,7 @@ export default async function PurchasesPage() {
         </Link>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Invoice #</th>
-              <th className="text-left p-4">Supplier</th>
-              <th className="text-left p-4">Date</th>
-              <th className="text-left p-4">Items</th>
-              <th className="text-left p-4">Total Amount</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {purchases?.map((purchase) => (
-              <tr key={purchase.id} className="border-b hover:bg-accent">
-                <td className="p-4 font-medium">{purchase.invoice_number || '-'}</td>
-                <td className="p-4">{purchase.suppliers?.name || '-'}</td>
-                <td className="p-4">
-                  {new Date(purchase.invoice_date).toLocaleDateString()}
-                </td>
-                <td className="p-4 text-sm text-muted-foreground">
-                  {purchase.purchase_items?.length || 0} items
-                </td>
-                <td className="p-4 font-medium">
-                  {formatCurrency(Number(purchase.total_amount), currency)}
-                </td>
-                <td className="p-4">
-                  <Link
-                    href={`/dashboard/purchases/${purchase.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    View
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PurchasesTable data={purchases} currency={currency} />
     </div>
   )
 }

@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { Calendar } from 'lucide-react'
 import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { DataTable } from '@/components/data-table'
+import { ColumnDef } from '@tanstack/react-table'
 
 type ProfitLossRow = {
   revenue: number | null
@@ -59,6 +61,90 @@ export default function ReportsPage() {
   const [ingredientTrends, setIngredientTrends] = useState<IngredientTrendRow[]>([])
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange)
 
+  const menuColumns = useMemo<ColumnDef<MenuPerformanceRow>[]>(() => [
+    {
+      accessorKey: "menu_item_name",
+      header: "Menu Item",
+      cell: ({ row }) => <span className="font-medium">{row.original.menu_item_name}</span>,
+    },
+    {
+      accessorKey: "quantity_sold",
+      header: () => <div className="text-right">Quantity Sold</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.quantity_sold}</div>,
+    },
+    {
+      accessorKey: "total_revenue",
+      header: () => <div className="text-right">Revenue</div>,
+      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.total_revenue)}</div>,
+    },
+    {
+      accessorKey: "total_cost",
+      header: () => <div className="text-right">Total Cost</div>,
+      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.total_cost)}</div>,
+    },
+    {
+      accessorKey: "total_margin",
+      header: () => <div className="text-right">Total Margin</div>,
+      cell: ({ row }) => (
+        <div className={`text-right font-bold ${
+          row.original.total_margin >= 0 ? 'text-green-600' : 'text-red-600'
+        }`}>
+          {formatCurrency(row.original.total_margin)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "margin_percentage",
+      header: () => <div className="text-right">Margin %</div>,
+      cell: ({ row }) => (
+        <div className={`text-right ${
+          row.original.margin_percentage >= 0 ? 'text-green-600' : 'text-red-600'
+        }`}>
+          {row.original.margin_percentage.toFixed(1)}%
+        </div>
+      ),
+    },
+  ], [formatCurrency])
+
+  const ingredientColumns = useMemo<ColumnDef<IngredientTrendRow>[]>(() => [
+    {
+      accessorKey: "ingredient_name",
+      header: "Ingredient",
+      cell: ({ row }) => <span className="font-medium">{row.original.ingredient_name}</span>,
+    },
+    {
+      accessorKey: "unit",
+      header: "Unit",
+      cell: ({ row }) => <span className="text-sm">{row.original.unit}</span>,
+    },
+    {
+      accessorKey: "avg_cost_per_unit",
+      header: () => <div className="text-right">Avg Cost/Unit</div>,
+      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.avg_cost_per_unit)}</div>,
+    },
+    {
+      accessorKey: "last_cost_per_unit",
+      header: () => <div className="text-right">Last Cost</div>,
+      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.last_cost_per_unit)}</div>,
+    },
+    {
+      accessorKey: "total_purchased",
+      header: () => <div className="text-right">Total Purchased</div>,
+      cell: ({ row }) => <div className="text-right">{row.original.total_purchased.toFixed(2)}</div>,
+    },
+    {
+      accessorKey: "cost_change_percentage",
+      header: () => <div className="text-right">Cost Change</div>,
+      cell: ({ row }) => (
+        <div className={`text-right font-bold ${
+          row.original.cost_change_percentage > 0 ? 'text-red-600' : 'text-green-600'
+        }`}>
+          {row.original.cost_change_percentage > 0 ? '+' : ''}{row.original.cost_change_percentage.toFixed(1)}%
+        </div>
+      ),
+    },
+  ], [formatCurrency])
+
   const loadReports = useCallback(async () => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -81,17 +167,17 @@ export default function ReportsPage() {
       const rows = (data ?? []) as unknown as ProfitLossRow[]
       setPnlData(rows[0] ?? null)
     } else if (activeTab === 'menu') {
-      const days = Math.ceil((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24))
       const { data } = await supabase.rpc('get_menu_performance', {
         p_tenant_id: userData.tenant_id,
-        p_days: days || 7,
+        p_start_date: dateRange.start,
+        p_end_date: dateRange.end,
       })
       setMenuPerformance(((data ?? []) as unknown) as MenuPerformanceRow[])
     } else if (activeTab === 'ingredients') {
-      const days = Math.ceil((new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()) / (1000 * 60 * 60 * 24))
       const { data } = await supabase.rpc('get_ingredient_cost_trends', {
         p_tenant_id: userData.tenant_id,
-        p_days: days || 30,
+        p_start_date: dateRange.start,
+        p_end_date: dateRange.end,
       })
       setIngredientTrends(((data ?? []) as unknown) as IngredientTrendRow[])
     }
@@ -111,6 +197,17 @@ export default function ReportsPage() {
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString()
+  }
+
+  const getTabDescription = () => {
+    switch (activeTab) {
+      case 'pnl':
+        return 'Overview of your financial performance including revenue, costs, and expenses. Calculated based on sales (revenue), menu item costs (COGS), and recorded expenses.'
+      case 'menu':
+        return 'Analysis of your menu items based on sales volume and profitability. Helps identify your best sellers and most profitable items.'
+      case 'ingredients':
+        return 'Track price fluctuations of your ingredients based on purchase history. Compares current standard cost vs. weighted average cost from recent purchases.'
+    }
   }
 
   return (
@@ -137,22 +234,28 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="border-b">
-        <nav className="flex gap-4">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 px-1 border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <div className="space-y-4">
+        <div className="border-b">
+          <nav className="flex gap-4">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`pb-3 px-1 border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+        
+        <div className="bg-muted/50 p-4 rounded-md border text-sm text-muted-foreground">
+          <p>{getTabDescription()}</p>
+        </div>
       </div>
 
       {loading ? (
@@ -219,71 +322,23 @@ export default function ReportsPage() {
           </div>
         </div>
       ) : activeTab === 'menu' ? (
-        <div className="bg-card rounded-lg border">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-4">Menu Item</th>
-                <th className="text-right p-4">Quantity Sold</th>
-                <th className="text-right p-4">Revenue</th>
-                <th className="text-right p-4">Total Cost</th>
-                <th className="text-right p-4">Total Margin</th>
-                <th className="text-right p-4">Margin %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {menuPerformance.map((item) => (
-                <tr key={item.menu_item_id} className="border-b hover:bg-accent">
-                  <td className="p-4 font-medium">{item.menu_item_name}</td>
-                  <td className="p-4 text-right">{item.quantity_sold}</td>
-                  <td className="p-4 text-right">{formatCurrency(item.total_revenue)}</td>
-                  <td className="p-4 text-right">{formatCurrency(item.total_cost)}</td>
-                  <td className={`p-4 text-right font-bold ${
-                    item.total_margin >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {formatCurrency(item.total_margin)}
-                  </td>
-                  <td className={`p-4 text-right ${
-                    item.margin_percentage >= 0 ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {item.margin_percentage.toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        menuPerformance.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card p-8 text-center">
+            <p className="text-muted-foreground text-lg mb-2">No menu performance data found</p>
+            <p className="text-sm text-muted-foreground">Try adjusting the date range or ensure you have recorded sales.</p>
+          </div>
+        ) : (
+          <DataTable columns={menuColumns} data={menuPerformance} />
+        )
       ) : (
-        <div className="bg-card rounded-lg border">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="text-left p-4">Ingredient</th>
-                <th className="text-left p-4">Unit</th>
-                <th className="text-right p-4">Avg Cost/Unit</th>
-                <th className="text-right p-4">Last Cost</th>
-                <th className="text-right p-4">Total Purchased</th>
-                <th className="text-right p-4">Cost Change</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ingredientTrends.map((item) => (
-                <tr key={item.ingredient_id} className="border-b hover:bg-accent">
-                  <td className="p-4 font-medium">{item.ingredient_name}</td>
-                  <td className="p-4 text-sm">{item.unit}</td>
-                  <td className="p-4 text-right">{formatCurrency(item.avg_cost_per_unit)}</td>
-                  <td className="p-4 text-right">{formatCurrency(item.last_cost_per_unit)}</td>
-                  <td className="p-4 text-right">{item.total_purchased.toFixed(2)}</td>
-                  <td className={`p-4 text-right font-bold ${
-                    item.cost_change_percentage > 0 ? 'text-red-600' : 'text-green-600'
-                  }`}>
-                    {item.cost_change_percentage > 0 ? '+' : ''}{item.cost_change_percentage.toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        ingredientTrends.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card p-8 text-center">
+            <p className="text-muted-foreground text-lg mb-2">No ingredient data found</p>
+            <p className="text-sm text-muted-foreground">Add ingredients and record purchases to see cost trends.</p>
+          </div>
+        ) : (
+          <DataTable columns={ingredientColumns} data={ingredientTrends} />
+        )
       )}
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
@@ -8,17 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
-
-// Define types locally since they might not be fully exported or easy to import with relations
-type SaleItemWithDetails = {
-  id: string
-  quantity: number
-  unit_price: number
-  total_price: number
-  menu_items: {
-    name: string
-  } | null
-}
+import { DataTable } from '@/components/data-table'
+import { getColumns, SaleItemWithDetails } from './columns'
 
 type SaleDetail = {
   id: string
@@ -55,6 +46,8 @@ export default function SaleDetailPage() {
   const [sale, setSale] = useState<SaleDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState('USD')
+
+  const columns = useMemo(() => getColumns(currency), [currency])
 
   useEffect(() => {
     const fetchSale = async () => {

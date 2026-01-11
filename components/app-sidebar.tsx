@@ -89,6 +89,23 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Menu",
+    items: [
+      {
+        title: "Menu Items",
+        url: "/dashboard/menu",
+        icon: ShoppingBag,
+        roles: ["owner", "manager"],
+      },
+      {
+        title: "Tables",
+        url: "/dashboard/tables",
+        icon: Building2,
+        roles: ["owner", "manager"],
+      },
+    ],
+  },
+  {
     label: "Inventory",
     items: [
       {
@@ -124,23 +141,6 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Menu",
-    items: [
-      {
-        title: "Menu Items",
-        url: "/dashboard/menu",
-        icon: ShoppingBag,
-        roles: ["owner", "manager"],
-      },
-      {
-        title: "Tables",
-        url: "/dashboard/tables",
-        icon: Building2,
-        roles: ["owner", "manager"],
-      },
-    ],
-  },
-  {
     label: "Finance",
     items: [
       {
@@ -164,7 +164,7 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Admin",
+    label: "Configuration",
     items: [
       {
         title: "Users",

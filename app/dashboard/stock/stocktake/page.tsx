@@ -1,22 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { CheckCircle, AlertTriangle } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import type { Location } from '@/types/database'
-
-interface StockItem {
-  id: string
-  ingredient_id: string
-  ingredient_name: string
-  unit: string
-  expected_quantity: number
-  actual_quantity: number
-  variance: number
-  variance_percentage: number
-}
+import { DataTable } from '@/components/data-table'
+import { getColumns, StockItem } from './columns'
 
 export default function StocktakePage() {
   const router = useRouter()
@@ -110,15 +101,20 @@ export default function StocktakePage() {
     loadStockItems()
   }, [loadStockItems])
 
-  const updateActualQuantity = (index: number, value: number) => {
-    const updated = [...stockItems]
-    updated[index].actual_quantity = value
-    updated[index].variance = value - updated[index].expected_quantity
-    updated[index].variance_percentage = updated[index].expected_quantity > 0
-      ? ((value - updated[index].expected_quantity) / updated[index].expected_quantity) * 100
-      : 0
-    setStockItems(updated)
-  }
+  const updateActualQuantity = useCallback((id: string, value: number) => {
+    setStockItems(prev => prev.map(item => {
+      if (item.id === id) {
+        const variance = value - item.expected_quantity
+        const variance_percentage = item.expected_quantity > 0
+          ? ((value - item.expected_quantity) / item.expected_quantity) * 100
+          : 0
+        return { ...item, actual_quantity: value, variance, variance_percentage }
+      }
+      return item
+    }))
+  }, [])
+
+  const columns = useMemo(() => getColumns(updateActualQuantity), [updateActualQuantity])
 
   const calculateVariance = () => {
     const positiveVariance = stockItems.reduce((sum, item) => {
@@ -317,51 +313,7 @@ export default function StocktakePage() {
 
       {stockItems.length > 0 && (
         <>
-          <div className="bg-card rounded-lg border overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-muted">
-                  <th className="text-left p-4">Ingredient</th>
-                  <th className="text-right p-4">Expected</th>
-                  <th className="text-right p-4">Actual</th>
-                  <th className="text-right p-4">Variance</th>
-                  <th className="text-right p-4">Variance %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stockItems.map((item, index) => (
-                  <tr key={item.id} className="border-b hover:bg-accent">
-                    <td className="p-4 font-medium">{item.ingredient_name}</td>
-                    <td className="p-4 text-right">
-                      {item.expected_quantity.toFixed(2)} {item.unit}
-                    </td>
-                    <td className="p-4">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.actual_quantity}
-                        onChange={(e) => updateActualQuantity(index, parseFloat(e.target.value))}
-                        className="w-24 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary text-right"
-                      />
-                    </td>
-                    <td className={`p-4 text-right font-bold ${
-                      item.variance > 0 ? 'text-green-600' : item.variance < 0 ? 'text-red-600' : ''
-                    }`}>
-                      {item.variance > 0 ? '+' : ''}{item.variance.toFixed(2)} {item.unit}
-                    </td>
-                    <td className={`p-4 text-right font-bold ${
-                      Math.abs(item.variance_percentage) > 5 ? 'text-red-600' : ''
-                    }`}>
-                      {item.variance_percentage.toFixed(1)}%
-                      {Math.abs(item.variance_percentage) > 5 && (
-                        <AlertTriangle size={16} className="inline ml-1" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable columns={columns} data={stockItems} />
 
           <div className="bg-card rounded-lg border p-6 sticky bottom-6">
             <div className="flex items-center justify-between">

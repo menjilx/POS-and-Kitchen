@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
+import { ExpensesTable } from './expenses-table'
+import type { Expense } from './columns'
 
 export default async function ExpensesPage() {
   const supabase = await createClient()
@@ -19,7 +20,7 @@ export default async function ExpensesPage() {
     redirect('/dashboard')
   }
 
-  const { data: expenses } = await supabase
+  const { data: expensesData } = await supabase
     .from('expenses')
     .select(`
       *,
@@ -37,6 +38,8 @@ export default async function ExpensesPage() {
 
   const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
   const currency = tenantSettings?.currency ?? 'USD'
+
+  const expenses = (expensesData || []) as unknown as Expense[]
 
   return (
     <div className="space-y-6">
@@ -58,43 +61,7 @@ export default async function ExpensesPage() {
         </div>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Date</th>
-              <th className="text-left p-4">Category</th>
-              <th className="text-left p-4">Description</th>
-              <th className="text-left p-4">Amount</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {expenses?.map((expense) => (
-              <tr key={expense.id} className="border-b hover:bg-accent">
-                <td className="p-4">
-                  {new Date(expense.expense_date).toLocaleDateString()}
-                </td>
-                <td className="p-4">
-                  {expense.expense_categories?.name || '-'}
-                </td>
-                <td className="p-4">{expense.description}</td>
-                <td className="p-4 font-medium">
-                  {formatCurrency(Number(expense.amount), currency)}
-                </td>
-                <td className="p-4">
-                  <a
-                    href={`/dashboard/expenses/${expense.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    View
-                  </a>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ExpensesTable data={expenses} currency={currency} />
     </div>
   )
 }

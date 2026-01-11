@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { LayoutGrid, List } from "lucide-react"
@@ -14,18 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatCurrency } from "@/lib/utils"
-
-interface MenuItem {
-  id: string
-  name: string
-  description?: string
-  status: string
-  selling_price: number | string
-  total_cost: number | string
-  contribution_margin: number | string
-  image_url?: string | null
-  // Add other fields if necessary
-}
+import { DataTable } from "@/components/data-table"
+import { getColumns, MenuItem } from "./columns"
 
 interface MenuGridProps {
   items: MenuItem[]
@@ -35,6 +25,8 @@ interface MenuGridProps {
 export function MenuGrid({ items, currency }: MenuGridProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [columns, setColumns] = useState("4")
+  
+  const tableColumns = useMemo(() => getColumns(currency), [currency])
 
   const getGridCols = () => {
     switch (columns) {
@@ -159,78 +151,7 @@ export function MenuGrid({ items, currency }: MenuGridProps) {
           })}
         </div>
       ) : (
-        <div className="bg-card rounded-lg border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr className="border-b text-left">
-                <th className="p-3 font-medium">Name</th>
-                <th className="p-3 font-medium">Status</th>
-                <th className="p-3 font-medium text-right">Price</th>
-                <th className="p-3 font-medium text-right">Cost</th>
-                <th className="p-3 font-medium text-right">Margin</th>
-                <th className="p-3 font-medium text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {items.map((item) => {
-                const margin = Number(item.contribution_margin)
-                const marginPercent = Number(item.selling_price) > 0
-                  ? (margin / Number(item.selling_price)) * 100
-                  : 0
-                
-                return (
-                  <tr key={item.id} className="hover:bg-muted/50">
-                    <td className="p-3">
-                      <div className="flex items-center gap-3">
-                        {item.image_url && (
-                          <div className="h-8 w-8 rounded overflow-hidden bg-muted shrink-0 relative">
-                            <Image
-                              src={item.image_url}
-                              alt={item.name}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                        )}
-                        <span className="font-medium">{item.name}</span>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-semibold tracking-wide ${
-                          item.status === 'active'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right">
-                      {formatCurrency(Number(item.selling_price), currency)}
-                    </td>
-                    <td className="p-3 text-right">
-                      {formatCurrency(Number(item.total_cost), currency)}
-                    </td>
-                    <td className="p-3 text-right">
-                      <span className={`${margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(margin, currency)} ({marginPercent.toFixed(0)}%)
-                      </span>
-                    </td>
-                    <td className="p-3 text-center">
-                      <Link
-                        href={`/dashboard/menu/${item.id}`}
-                        className="inline-block px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 text-xs font-medium"
-                      >
-                        Edit
-                      </Link>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={tableColumns} data={items} />
       )}
     </div>
   )

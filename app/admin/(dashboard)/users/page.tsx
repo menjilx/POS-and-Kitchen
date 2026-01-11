@@ -1,21 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { Eye, Search } from 'lucide-react'
-import type { User } from '@/types/database'
-
-type TenantSummary = {
-  id: string
-  name: string
-  email: string
-  is_suspended: boolean | null
-}
-
-type UserWithTenant = User & {
-  tenants: TenantSummary | null
-}
+import { Search } from 'lucide-react'
+import { DataTable } from '@/components/data-table'
+import { getColumns, UserWithTenant } from './columns'
 
 export default function AdminUsersPage() {
   const router = useRouter()
@@ -58,7 +48,7 @@ export default function AdminUsersPage() {
     )
   })
 
-  const handleImpersonate = async (userId: string) => {
+  const handleImpersonate = useCallback(async (userId: string) => {
     if (!confirm('You will be logged in as this user. Continue?')) return
 
     try {
@@ -74,7 +64,9 @@ export default function AdminUsersPage() {
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to impersonate user')
     }
-  }
+  }, [router])
+
+  const columns = useMemo(() => getColumns(handleImpersonate), [handleImpersonate])
 
   return (
     <div className="space-y-6">
@@ -118,72 +110,10 @@ export default function AdminUsersPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
         </div>
       ) : (
-        <div className="bg-card rounded-lg border overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-muted">
-                <th className="text-left p-4">User</th>
-                <th className="text-left p-4">Tenant</th>
-                <th className="text-left p-4">Role</th>
-                <th className="text-left p-4">Status</th>
-                <th className="text-left p-4">Created</th>
-                <th className="text-left p-4">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers
-                .filter((user) => (!selectedTenant ? true : user.tenants?.id === selectedTenant))
-                .map((user) => (
-                <tr key={user.id} className="border-b hover:bg-accent">
-                  <td className="p-4">
-                    <div className="font-medium">{user.full_name || 'N/A'}</div>
-                    <div className="text-sm text-muted-foreground">{user.email}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-medium">{user.tenants?.name || (user.role === 'superadmin' ? 'Global' : 'N/A')}</div>
-                    {user.tenants?.is_suspended && (
-                      <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded">Suspended</span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      user.role === 'owner' ? 'bg-purple-100 text-purple-800' :
-                      user.role === 'manager' ? 'bg-blue-100 text-blue-800' :
-                      user.role === 'superadmin' ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    {user.status === 'active' ? (
-                      <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Active</span>
-                    ) : (
-                      <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">Inactive</span>
-                    )}
-                  </td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="p-4">
-                    <button
-                      onClick={() => handleImpersonate(user.id)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent text-sm"
-                    >
-                      <Eye size={16} />
-                      Impersonate
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredUsers.length === 0 && (
-            <div className="p-12 text-center text-muted-foreground">
-              No users found matching your search criteria.
-            </div>
-          )}
-        </div>
+        <DataTable
+          columns={columns}
+          data={filteredUsers.filter((user) => (!selectedTenant ? true : user.tenants?.id === selectedTenant))}
+        />
       )}
     </div>
   )

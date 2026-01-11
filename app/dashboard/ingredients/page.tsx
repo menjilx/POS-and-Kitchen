@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { IngredientsTable } from './ingredients-table'
+import type { Ingredient } from './columns'
 
 export default async function IngredientsPage() {
   const supabase = await createClient()
@@ -20,7 +21,7 @@ export default async function IngredientsPage() {
     redirect('/dashboard')
   }
 
-  const { data: ingredients } = await supabase
+  const { data: ingredientsData } = await supabase
     .from('ingredients')
     .select(`
       *,
@@ -37,6 +38,8 @@ export default async function IngredientsPage() {
 
   const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
   const currency = tenantSettings?.currency ?? 'USD'
+
+  const ingredients = (ingredientsData || []) as unknown as Ingredient[]
 
   return (
     <div className="space-y-6">
@@ -58,63 +61,7 @@ export default async function IngredientsPage() {
         </div>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Name</th>
-              <th className="text-left p-4">Category</th>
-              <th className="text-left p-4">Stock Unit</th>
-              <th className="text-left p-4">Usage Unit</th>
-              <th className="text-left p-4">Conversion</th>
-              <th className="text-left p-4">Cost/Unit</th>
-              <th className="text-left p-4">Reorder Level</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ingredients?.map((ingredient) => (
-              <tr key={ingredient.id} className="border-b hover:bg-accent">
-                <td className="p-4">{ingredient.name}</td>
-                <td className="p-4">
-                  {ingredient.ingredient_categories?.name || '-'}
-                </td>
-                <td className="p-4">{ingredient.unit}</td>
-                <td className="p-4">{ingredient.usage_unit || '-'}</td>
-                <td className="p-4">
-                  {ingredient.conversion_factor && ingredient.conversion_factor !== 1
-                    ? `1 ${ingredient.unit} = ${ingredient.conversion_factor} ${ingredient.usage_unit || ''}`
-                    : '-'}
-                </td>
-                <td className="p-4">
-                  {formatCurrency(Number(ingredient.cost_per_unit), currency)}
-                </td>
-                <td className="p-4">{ingredient.reorder_level}</td>
-                <td className="p-4">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      ingredient.status === 'active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {ingredient.status}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <Link
-                    href={`/dashboard/ingredients/${ingredient.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    Edit
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <IngredientsTable data={ingredients} currency={currency} />
     </div>
   )
 }

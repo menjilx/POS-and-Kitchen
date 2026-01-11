@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { DataTable } from '@/components/data-table'
+import { columns } from './columns'
 
 export default async function UsersPage() {
   const supabase = await createClient()
@@ -37,53 +39,7 @@ export default async function UsersPage() {
         </Link>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Name</th>
-              <th className="text-left p-4">Email</th>
-              <th className="text-left p-4">Role</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Last Login</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users?.map((userItem) => (
-              <tr key={userItem.id} className="border-b hover:bg-accent">
-                <td className="p-4">{userItem.full_name || '-'}</td>
-                <td className="p-4">{userItem.email}</td>
-                <td className="p-4 capitalize">{userItem.role}</td>
-                <td className="p-4">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs ${
-                      userItem.status === 'active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {userItem.status}
-                  </span>
-                </td>
-                <td className="p-4 text-sm">
-                  {userItem.last_login
-                    ? new Date(userItem.last_login).toLocaleDateString()
-                    : 'Never'}
-                </td>
-                <td className="p-4">
-                  <Link
-                    href={`/dashboard/users/${userItem.id}`}
-                    className="text-primary hover:underline"
-                  >
-                    Edit
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={users || []} />
     </div>
   )
 }

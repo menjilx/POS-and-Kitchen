@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
-import { Badge } from "@/components/ui/badge"
+import { RegistersTable } from './registers-table'
+import type { RegisterSessionWithUser } from './columns'
 
 export default async function RegistersReportPage() {
   const supabase = await createClient()
@@ -40,59 +40,7 @@ export default async function RegistersReportPage() {
         <h1 className="text-3xl font-bold">Register Sessions</h1>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Cashier</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Opening Time</th>
-              <th className="text-left p-4">Opening Amount</th>
-              <th className="text-left p-4">Closing Time</th>
-              <th className="text-left p-4">Closing Amount</th>
-              <th className="text-left p-4">Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions?.map((session) => (
-              <tr key={session.id} className="border-b hover:bg-accent">
-                <td className="p-4 font-medium">
-                  {session.users?.full_name || 'Unknown'}
-                </td>
-                <td className="p-4">
-                  <Badge variant={session.status === 'open' ? 'default' : 'secondary'}>
-                    {session.status}
-                  </Badge>
-                </td>
-                <td className="p-4 text-sm">
-                  {new Date(session.opening_time).toLocaleString()}
-                </td>
-                <td className="p-4 font-medium">
-                  {formatCurrency(Number(session.opening_amount), currency)}
-                </td>
-                <td className="p-4 text-sm">
-                  {session.closing_time ? new Date(session.closing_time).toLocaleString() : '-'}
-                </td>
-                <td className="p-4 font-medium">
-                  {session.closing_amount 
-                    ? formatCurrency(Number(session.closing_amount), currency) 
-                    : '-'}
-                </td>
-                <td className="p-4 text-sm text-muted-foreground truncate max-w-50">
-                  {session.notes || '-'}
-                </td>
-              </tr>
-            ))}
-            {(!sessions || sessions.length === 0) && (
-               <tr>
-                  <td colSpan={7} className="p-4 text-center text-muted-foreground">
-                    No register sessions found.
-                  </td>
-               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <RegistersTable data={sessions as unknown as RegisterSessionWithUser[]} currency={currency} />
     </div>
   )
 }

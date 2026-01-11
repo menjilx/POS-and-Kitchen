@@ -1,20 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { Plus } from 'lucide-react'
 import type { Location, Stock, StockAdjustmentType } from '@/types/database'
-
-type StockWithIngredient = Stock & {
-  ingredients: {
-    id: string
-    name: string
-    unit: string
-    reorder_level: number | null
-    ingredient_categories: { name: string } | null
-  } | null
-}
+import { DataTable } from '@/components/data-table'
+import { getColumns, StockWithIngredient } from './columns'
 
 export default function StockPage() {
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
@@ -62,7 +54,7 @@ export default function StockPage() {
           .order('name'),
       ])
 
-      setStock(stockRes.data || [])
+      setStock((stockRes.data || []) as StockWithIngredient[])
       setLocations(locationsRes.data || [])
     }
   }
@@ -153,6 +145,13 @@ export default function StockPage() {
     setShowAdjustmentModal(true)
   }
 
+  const columns = useMemo(() => getColumns(locations, openAdjustmentModal), [locations])
+
+  const getRowClassName = (row: StockWithIngredient) => {
+    const isLow = Number(row.quantity) < Number(row.ingredients?.reorder_level)
+    return isLow ? 'bg-red-50 hover:bg-red-100/50' : ''
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -165,65 +164,11 @@ export default function StockPage() {
         </Link>
       </div>
 
-      <div className="bg-card rounded-lg border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-4">Ingredient</th>
-              <th className="text-left p-4">Category</th>
-              <th className="text-left p-4">Location</th>
-              <th className="text-left p-4">Quantity</th>
-              <th className="text-left p-4">Reorder Level</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stock.map((item) => {
-              const isLow = Number(item.quantity) < Number(item.ingredients?.reorder_level)
-              return (
-                <tr
-                  key={item.id}
-                  className={`border-b hover:bg-accent ${
-                    isLow ? 'bg-red-50' : ''
-                  }`}
-                >
-                  <td className="p-4">{item.ingredients?.name}</td>
-                  <td className="p-4 text-sm text-muted-foreground">
-                    {item.ingredients?.ingredient_categories?.name || '-'}
-                  </td>
-                  <td className="p-4">
-                    {locations.find(l => l.id === item.location_id)?.name || item.location_id}
-                  </td>
-                  <td className="p-4 font-medium">
-                    {Number(item.quantity).toFixed(2)} {item.ingredients?.unit}
-                  </td>
-                  <td className="p-4">{item.ingredients?.reorder_level}</td>
-                  <td className="p-4">
-                    {isLow ? (
-                      <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
-                        Low Stock
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                        OK
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-4">
-                    <button
-                      onClick={() => openAdjustmentModal(item)}
-                      className="text-primary hover:underline text-sm"
-                    >
-                      Adjust
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable 
+        columns={columns} 
+        data={stock} 
+        getRowClassName={getRowClassName}
+      />
 
       {showAdjustmentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
