@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Shield, CheckCircle } from 'lucide-react'
@@ -17,7 +17,7 @@ export default function SuperadminSignupPage() {
   const [error, setError] = useState('')
   const [isSecretValid, setIsSecretValid] = useState(false)
 
-  const checkSecretCode = async (code: string) => {
+  const checkSecretCode = useCallback(async (code: string) => {
     if (!code) {
       setIsSecretValid(false)
       return
@@ -39,14 +39,14 @@ export default function SuperadminSignupPage() {
       console.error('Failed to check secret:', e)
       setIsSecretValid(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     const timer = setTimeout(() => {
       checkSecretCode(formData.secretCode)
     }, 500)
     return () => clearTimeout(timer)
-  }, [formData.secretCode])
+  }, [checkSecretCode, formData.secretCode])
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -84,9 +84,9 @@ export default function SuperadminSignupPage() {
       }
       
       router.push('/admin/login?message=Account+created+successfully')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Signup error:', err)
-      setError(err?.message || 'Signup failed')
+      setError(err instanceof Error ? err.message : 'Signup failed')
     } finally {
       setLoading(false)
     }

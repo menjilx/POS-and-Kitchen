@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 
 export default async function UsersPage() {
   const supabase = await createClient()
@@ -28,12 +29,12 @@ export default async function UsersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Users</h1>
-        <a
+        <Link
           href="/dashboard/users/invite"
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           Invite User
-        </a>
+        </Link>
       </div>
 
       <div className="bg-card rounded-lg border">
@@ -71,12 +72,12 @@ export default async function UsersPage() {
                     : 'Never'}
                 </td>
                 <td className="p-4">
-                  <a
+                  <Link
                     href={`/dashboard/users/${userItem.id}`}
                     className="text-primary hover:underline"
                   >
                     Edit
-                  </a>
+                  </Link>
                 </td>
               </tr>
             ))}

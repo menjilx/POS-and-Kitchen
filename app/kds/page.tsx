@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Clock, CheckCircle2, ChefHat, AlertCircle, XCircle } from 'lucide-react'
 import type { KDSOrder, KDSOrderStatus, KDSOrderItem } from '@/types/database'
@@ -11,28 +12,16 @@ type OrderWithItems = KDSOrder & {
   })[]
 }
 
-export default function KDSPage() {
+function KDSContent() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get('token')
   
   const [orders, setOrders] = useState<OrderWithItems[]>([])
   const [loading, setLoading] = useState(true)
+  const [tenantId, setTenantId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadOrders()
-    subscribeToOrders()
-  }, [])
-
-  const loadOrders = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!userData) return
-
+  const loadOrders = useCallback(async (tid: string) => {
     const { data: ordersData } = await supabase
       .from('kds_orders')
       .select(`
@@ -42,16 +31,80 @@ export default function KDSPage() {
           menu_items (name)
         )
       `)
-      .eq('tenant_id', userData.tenant_id)
+      .eq('tenant_id', tid)
       .not('status', 'eq', 'served')
       .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: true })
 
-    setOrders((ordersData as any) || [])
+    setOrders(((ordersData ?? []) as unknown as OrderWithItems[]))
     setLoading(false)
-  }
+  }, [])
 
-  const subscribeToOrders = () => {
+  const init = useCallback(async () => {
+    try {
+      let tid: string | null = null
+
+      if (token) {
+        // Authenticate with token
+        const { data, error } = await supabase
+          .from('kitchen_displays')
+          .select('tenant_id')
+          .eq('token', token)
+          .single()
+
+        if (error || !data) {
+          setError('Invalid KDS Token')
+          setLoading(false)
+          return
+        }
+        tid = data.tenant_id
+      } else {
+        // Fallback to user auth
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setError('Authentication required')
+          setLoading(false)
+          return
+        }
+
+        const { data: userData } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .single()
+
+        if (userData) {
+          tid = userData.tenant_id
+        }
+      }
+
+      if (tid) {
+        setTenantId(tid)
+        await loadOrders(tid)
+      } else {
+        setError('No tenant found')
+        setLoading(false)
+      }
+    } catch (err) {
+      console.error('KDS Init Error:', err)
+      setError('Failed to initialize KDS')
+      setLoading(false)
+    }
+  }, [token, loadOrders])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void init()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [init])
+
+  const subscribeToOrders = useCallback(() => {
+    if (!tenantId) return () => {}
+
     const channel = supabase
       .channel('kds_orders_changes')
       .on(
@@ -60,8 +113,11 @@ export default function KDSPage() {
           event: '*',
           schema: 'public',
           table: 'kds_orders',
+          filter: `tenant_id=eq.${tenantId}`
         },
-        () => loadOrders()
+        () => {
+          void loadOrders(tenantId)
+        }
       )
       .on(
         'postgres_changes',
@@ -70,17 +126,27 @@ export default function KDSPage() {
           schema: 'public',
           table: 'kds_order_items',
         },
-        () => loadOrders()
+        () => {
+          // Ideally check tenant_id here too via relation, but straightforward reload is safe
+          void loadOrders(tenantId)
+        }
       )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }
+  }, [loadOrders, tenantId])
+
+  useEffect(() => {
+    const unsubscribe = subscribeToOrders()
+    return () => {
+      unsubscribe()
+    }
+  }, [subscribeToOrders])
 
   const updateOrderStatus = async (orderId: string, status: KDSOrderStatus) => {
-    const updateData: any = { status }
+    const updateData: Partial<Pick<KDSOrder, 'status' | 'started_at' | 'completed_at'>> = { status }
     if (status === 'preparing') {
       updateData.started_at = new Date().toISOString()
     } else if (status === 'ready' || status === 'served') {
@@ -139,6 +205,18 @@ export default function KDSPage() {
     pending: orders.filter(o => o.status === 'pending'),
     preparing: orders.filter(o => o.status === 'preparing'),
     ready: orders.filter(o => o.status === 'ready'),
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
+         <div className="bg-white rounded-lg shadow p-8 text-center max-w-md w-full">
+          <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
+          <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600">{error}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -284,5 +362,17 @@ export default function KDSPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function KDSPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    }>
+      <KDSContent />
+    </Suspense>
   )
 }

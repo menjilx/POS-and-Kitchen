@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { MenuGrid } from '@/components/menu/menu-grid'
 
 export default async function MenuPage() {
   const supabase = await createClient()
@@ -24,76 +26,36 @@ export default async function MenuPage() {
     .eq('tenant_id', userData.tenant_id)
     .order('name')
 
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('settings')
+    .eq('id', userData.tenant_id)
+    .single()
+
+  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
+  const currency = tenantSettings?.currency ?? 'USD'
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Menu</h1>
-        <a
-          href="/dashboard/menu/new"
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          Add Menu Item
-        </a>
+        <div className="flex gap-4">
+          <Link
+            href="/dashboard/menu/categories"
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90"
+          >
+            Manage Categories
+          </Link>
+          <Link
+            href="/dashboard/menu/new"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Add Menu Item
+          </Link>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {menuItems?.map((item) => {
-          const margin = Number(item.contribution_margin)
-          const marginPercent = Number(item.selling_price) > 0
-            ? (margin / Number(item.selling_price)) * 100
-            : 0
-          const totalCostPercent = Number(item.selling_price) > 0
-            ? (Number(item.total_cost) / Number(item.selling_price)) * 100
-            : 0
-
-          return (
-            <div key={item.id} className="bg-card rounded-lg border p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-bold">{item.name}</h3>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs ${
-                    item.status === 'active'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {item.status}
-                </span>
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Selling Price:</span>
-                  <span className="font-medium">${Number(item.selling_price).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Cost:</span>
-                  <span className="font-medium">${Number(item.total_cost).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Margin:</span>
-                  <span className={`font-medium ${margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    ${margin.toFixed(2)} ({marginPercent.toFixed(1)}%)
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cost %:</span>
-                  <span className="font-medium">{totalCostPercent.toFixed(1)}%</span>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t flex gap-2">
-                <a
-                  href={`/dashboard/menu/${item.id}`}
-                  className="flex-1 text-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
-                >
-                  Edit
-                </a>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      <MenuGrid items={menuItems || []} currency={currency} />
     </div>
   )
 }

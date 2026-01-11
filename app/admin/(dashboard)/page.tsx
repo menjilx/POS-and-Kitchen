@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Users, Building2, TrendingUp, AlertTriangle, DollarSign } from 'lucide-react'
+import { Users, Building2, AlertTriangle, DollarSign } from 'lucide-react'
 import Link from 'next/link'
+import { formatCurrency } from '@/lib/utils'
 
 interface Tenant {
   id: string
@@ -20,6 +21,11 @@ interface StatCardProps {
   subtitle?: string
   icon: React.ElementType
   color?: string
+}
+
+type TenantSettingsRow = {
+  id: string
+  settings: { currency?: string } | null
 }
 
 function StatCard({ title, value, subtitle, icon: Icon, color = 'bg-slate-100' }: StatCardProps) {
@@ -43,7 +49,7 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState({
     totalTenants: 0,
     totalUsers: 0,
-    totalSales: 0,
+    totalSalesDisplay: '0',
     suspendedTenants: 0,
   })
   const [loading, setLoading] = useState(true)
@@ -63,14 +69,38 @@ export default function AdminDashboardPage() {
       if (tenantsData.error) throw tenantsData.error
       if (usersData.error) throw usersData.error
 
-      const tenants = tenantsData.data || []
-      const suspendedCount = tenants.filter((t: Tenant) => t.is_suspended).length
-      const totalSales = tenants.reduce((sum: number, t: Tenant) => sum + (Number(t.total_sales) || 0), 0)
+      const tenants = (tenantsData.data || []) as Tenant[]
+      const suspendedCount = tenants.filter((t) => t.is_suspended).length
+
+      const tenantIds = tenants.map((t) => t.id).filter(Boolean)
+      const { data: settingsRows, error: settingsError } = await supabase
+        .from('tenants')
+        .select('id, settings')
+        .in('id', tenantIds)
+        .returns<TenantSettingsRow[]>()
+      if (settingsError) throw settingsError
+
+      const currencyByTenantId = new Map<string, string>()
+      ;(settingsRows ?? []).forEach((row) => {
+        currencyByTenantId.set(row.id, row.settings?.currency ?? 'USD')
+      })
+
+      const totalsByCurrency = new Map<string, number>()
+      tenants.forEach((t) => {
+        const currency = currencyByTenantId.get(t.id) ?? 'USD'
+        const amount = Number(t.total_sales) || 0
+        totalsByCurrency.set(currency, (totalsByCurrency.get(currency) ?? 0) + amount)
+      })
+
+      const totalSalesDisplay = Array.from(totalsByCurrency.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([currency, total]) => formatCurrency(total, currency))
+        .join(' / ')
 
       setStats({
         totalTenants: tenants.length,
         totalUsers: usersData.count || 0,
-        totalSales,
+        totalSalesDisplay: totalSalesDisplay || '0',
         suspendedTenants: suspendedCount,
       })
     } catch (err) {
@@ -111,7 +141,7 @@ export default function AdminDashboardPage() {
             />
             <StatCard
               title="Total Sales"
-              value={`$${stats.totalSales.toLocaleString()}`}
+              value={stats.totalSalesDisplay}
               subtitle="All time"
               icon={DollarSign}
               color="bg-purple-50"

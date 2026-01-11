@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { Building2, Trash2, CheckCircle, XCircle, MoreVertical, Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 
 interface Tenant {
   id: string
@@ -15,10 +15,15 @@ interface Tenant {
   suspension_reason: string | null
   suspended_at: string | null
   created_at: string
+  currency?: string
+}
+
+type TenantSettingsRow = {
+  id: string
+  settings: { currency?: string } | null
 }
 
 export default function AdminTenantsPage() {
-  const router = useRouter()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [showSuspendModal, setShowSuspendModal] = useState(false)
@@ -35,7 +40,28 @@ export default function AdminTenantsPage() {
     try {
       const { data, error } = await supabase.rpc('get_all_tenants')
       if (error) throw error
-      setTenants(data || [])
+
+      const baseTenants = (data || []) as Tenant[]
+      const tenantIds = baseTenants.map((t) => t.id).filter(Boolean)
+
+      const { data: settingsRows, error: settingsError } = await supabase
+        .from('tenants')
+        .select('id, settings')
+        .in('id', tenantIds)
+        .returns<TenantSettingsRow[]>()
+      if (settingsError) throw settingsError
+
+      const currencyByTenantId = new Map<string, string>()
+      ;(settingsRows ?? []).forEach((row) => {
+        currencyByTenantId.set(row.id, row.settings?.currency ?? 'USD')
+      })
+
+      setTenants(
+        baseTenants.map((t) => ({
+          ...t,
+          currency: currencyByTenantId.get(t.id) ?? 'USD',
+        }))
+      )
     } catch (err) {
       console.error('Failed to load tenants:', err)
     } finally {
@@ -140,7 +166,7 @@ export default function AdminTenantsPage() {
                   <td className="p-4 font-medium">{tenant.name}</td>
                   <td className="p-4">{tenant.email}</td>
                   <td className="p-4">{tenant.user_count}</td>
-                  <td className="p-4">${tenant.total_sales.toLocaleString()}</td>
+                  <td className="p-4">{formatCurrency(tenant.total_sales || 0, tenant.currency ?? 'USD')}</td>
                   <td className="p-4">
                     {tenant.is_suspended ? (
                       <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">

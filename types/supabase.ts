@@ -50,6 +50,8 @@ export interface Database {
           status: 'active' | 'deactivated'
           created_at: string
           updated_at: string
+          usage_unit: string
+          conversion_factor: number
         }
         Insert: Omit<Database['public']['Tables']['ingredients']['Row'], 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<Database['public']['Tables']['ingredients']['Row'], 'id' | 'tenant_id' | 'created_at'>>
@@ -132,6 +134,7 @@ export interface Database {
           total_cost: number
           contribution_margin: number
           status: 'active' | 'deactivated'
+          image_url: string | null
           created_at: string
           updated_at: string
         }
@@ -238,7 +241,7 @@ export interface Database {
           payment_status: 'pending' | 'partial' | 'paid' | 'refunded'
           payment_notes: string | null
           tip_amount: number
-          payment_data: any
+          payment_data: unknown
           notes: string | null
           sale_date: string
           sale_time: string

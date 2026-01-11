@@ -1,22 +1,32 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { Plus, Trash2, AlertCircle } from 'lucide-react'
+import { Plus } from 'lucide-react'
+import type { Location, Stock, StockAdjustmentType } from '@/types/database'
+
+type StockWithIngredient = Stock & {
+  ingredients: {
+    id: string
+    name: string
+    unit: string
+    reorder_level: number | null
+    ingredient_categories: { name: string } | null
+  } | null
+}
 
 export default function StockPage() {
-  const router = useRouter()
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [stock, setStock] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
+  const [stock, setStock] = useState<StockWithIngredient[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
 
   const [adjustmentForm, setAdjustmentForm] = useState({
     ingredient_id: '',
     location_id: '',
-    adjustment_type: 'adjustment',
+    adjustment_type: 'adjustment' as StockAdjustmentType,
     quantity: '',
     notes: '',
   })
@@ -83,7 +93,7 @@ export default function StockPage() {
           tenant_id: userData.tenant_id,
           ingredient_id: adjustmentForm.ingredient_id,
           location_id: adjustmentForm.location_id,
-          adjustment_type: adjustmentForm.adjustment_type as any,
+          adjustment_type: adjustmentForm.adjustment_type,
           quantity: isPositive ? Math.abs(quantity) : -Math.abs(quantity),
           notes: adjustmentForm.notes,
           created_by: user.id,
@@ -132,9 +142,9 @@ export default function StockPage() {
     }
   }
 
-  const openAdjustmentModal = (stockItem: any) => {
+  const openAdjustmentModal = (stockItem: StockWithIngredient) => {
     setAdjustmentForm({
-      ingredient_id: stockItem.ingredients.id,
+      ingredient_id: stockItem.ingredients?.id || '',
       location_id: stockItem.location_id,
       adjustment_type: 'adjustment',
       quantity: '',
@@ -147,12 +157,12 @@ export default function StockPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Stock Monitoring</h1>
-        <a
+        <Link
           href="/dashboard/stock/stocktake"
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
-          New Stocktake
-        </a>
+          Stock
+        </Link>
       </div>
 
       <div className="bg-card rounded-lg border">
@@ -169,7 +179,7 @@ export default function StockPage() {
             </tr>
           </thead>
           <tbody>
-            {stock.map((item: any) => {
+            {stock.map((item) => {
               const isLow = Number(item.quantity) < Number(item.ingredients?.reorder_level)
               return (
                 <tr
@@ -237,11 +247,11 @@ export default function StockPage() {
             <form onSubmit={handleAdjustmentSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Type</label>
-                <select
-                  value={adjustmentForm.adjustment_type}
-                  onChange={(e) => setAdjustmentForm({ ...adjustmentForm, adjustment_type: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                >
+            <select
+              value={adjustmentForm.adjustment_type}
+              onChange={(e) => setAdjustmentForm({ ...adjustmentForm, adjustment_type: e.target.value as StockAdjustmentType })}
+              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            >
                   <option value="adjustment">Adjustment</option>
                   <option value="waste">Waste</option>
                 </select>

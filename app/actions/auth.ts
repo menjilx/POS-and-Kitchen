@@ -5,38 +5,71 @@ import { redirect } from 'next/navigation'
 
 export async function fixProfile(userId: string, email: string) {
   const supabase = await createClient()
-  
-  // Create a recovery tenant
-  const { data: newTenant, error: tenantError } = await supabase
-    .from('tenants')
-    .insert({
-      name: 'Recovery Tenant',
-      email: email
-    })
-    .select()
-    .single()
-    
-  if (tenantError) {
-    console.error("Failed to create recovery tenant:", tenantError)
-    return { error: "Failed to create recovery tenant. " + tenantError.message }
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user || user.id !== userId) {
+    redirect('/login')
+  }
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const allowedRoles = new Set(['owner', 'manager', 'staff', 'superadmin'])
+  const allowedStatuses = new Set(['active', 'deactivated'])
+
+  const meta = user.user_metadata as Record<string, unknown> | null
+  const metaTenantIdRaw = typeof meta?.tenant_id === 'string' ? meta.tenant_id : null
+  const metaTenantId = metaTenantIdRaw && uuidRegex.test(metaTenantIdRaw) ? metaTenantIdRaw : null
+  const fullName = typeof meta?.full_name === 'string' ? meta.full_name : null
+  const role = typeof meta?.role === 'string' && allowedRoles.has(meta.role) ? meta.role : 'owner'
+  const status = typeof meta?.status === 'string' && allowedStatuses.has(meta.status) ? meta.status : 'active'
+  const resolvedEmail = user.email || email
+
+  if (!resolvedEmail) {
+    redirect('/login')
   }
   
-  // Insert the user
-  const { error: insertError } = await supabase
+  let tenantId = metaTenantId
+
+  if (!tenantId) {
+    const { data: newTenant, error: tenantError } = await supabase
+      .from('tenants')
+      .insert({
+        name: 'Recovery Tenant',
+        email: resolvedEmail,
+      })
+      .select()
+      .single()
+
+    if (tenantError || !newTenant) {
+      throw new Error(tenantError?.message || 'Failed to create recovery tenant')
+    }
+
+    tenantId = newTenant.id
+  }
+  
+  const { error: upsertError } = await supabase
     .from('users')
-    .insert({
-      id: userId,
-      tenant_id: newTenant.id,
-      email: email,
-      full_name: 'Recovered User',
-      role: 'owner',
-      status: 'active'
-    })
+    .upsert(
+      {
+        id: userId,
+        tenant_id: tenantId,
+        email: resolvedEmail,
+        full_name: fullName,
+        role,
+        status,
+      },
+      { onConflict: 'id' }
+    )
     
-  if (insertError) {
-    return { error: "Failed to insert user profile. " + insertError.message }
+  if (upsertError) {
+    throw new Error(upsertError.message)
   }
   
-  // If successful, we don't return, we redirect to refresh the layout
   redirect('/dashboard')
+}
+
+export async function signOut() {
+  const supabase = await createClient()
+  await supabase.auth.signOut()
+  redirect('/login')
 }

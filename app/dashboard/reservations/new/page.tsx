@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import type { Table } from '@/types/database'
 
 export default function NewReservationPage() {
   const router = useRouter()
@@ -20,7 +22,7 @@ export default function NewReservationPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [tables, setTables] = useState<any[]>([])
+  const [tables, setTables] = useState<Table[]>([])
 
   useEffect(() => {
     loadTables()
@@ -43,7 +45,7 @@ export default function NewReservationPage() {
         .eq('tenant_id', userData.tenant_id)
         .order('table_number')
 
-      setTables(data || [])
+      setTables(((data ?? []) as unknown) as Table[])
     }
   }
 
@@ -99,9 +101,9 @@ export default function NewReservationPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/reservations" className="text-primary hover:underline">
+        <Link href="/dashboard/reservations" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">New Reservation</h1>
       </div>
 

@@ -1,28 +1,38 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import type { ExpenseCategory } from '@/types/database'
+import { useTenantSettings } from '@/hooks/use-tenant-settings'
+
+type ExpenseFormData = {
+  category_id: string
+  description: string
+  amount: string
+  expense_date: string
+  notes: string
+}
+
+const defaultExpenseDate = new Date().toISOString().split('T')[0]
 
 export default function NewExpensePage() {
   const router = useRouter()
+  const { currencySymbol } = useTenantSettings()
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ExpenseFormData>({
     category_id: '',
     description: '',
     amount: '',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: defaultExpenseDate,
     notes: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [categories, setCategories] = useState<any[]>([])
+  const [categories, setCategories] = useState<ExpenseCategory[]>([])
 
-  useEffect(() => {
-    loadCategories()
-  }, [])
-
-  const loadCategories = async () => {
+  const loadCategories = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -39,9 +49,19 @@ export default function NewExpensePage() {
         .eq('tenant_id', userData.tenant_id)
         .order('name')
 
-      setCategories(data || [])
+      setCategories(((data ?? []) as unknown) as ExpenseCategory[])
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadCategories()
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [loadCategories])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -83,9 +103,9 @@ export default function NewExpensePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/expenses" className="text-primary hover:underline">
+        <Link href="/dashboard/expenses" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">New Expense</h1>
       </div>
 
@@ -135,7 +155,7 @@ export default function NewExpensePage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="amount" className="block text-sm font-medium mb-2">
-                Amount ($)
+                Amount ({currencySymbol})
               </label>
               <input
                 id="amount"

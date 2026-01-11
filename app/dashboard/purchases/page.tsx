@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 
 export default async function PurchasesPage() {
@@ -29,6 +30,15 @@ export default async function PurchasesPage() {
     .eq('tenant_id', userData.tenant_id)
     .order('invoice_date', { ascending: false })
     .limit(50)
+
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('settings')
+    .eq('id', userData.tenant_id)
+    .single()
+
+  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
+  const currency = tenantSettings?.currency ?? 'USD'
 
   return (
     <div className="space-y-6">
@@ -66,7 +76,7 @@ export default async function PurchasesPage() {
                   {purchase.purchase_items?.length || 0} items
                 </td>
                 <td className="p-4 font-medium">
-                  ${Number(purchase.total_amount).toFixed(2)}
+                  {formatCurrency(Number(purchase.total_amount), currency)}
                 </td>
                 <td className="p-4">
                   <a

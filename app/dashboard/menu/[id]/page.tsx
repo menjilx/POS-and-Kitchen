@@ -1,9 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { Trash2, Plus } from 'lucide-react'
+import { Trash2, Plus, Upload, X } from 'lucide-react'
+import type { Ingredient } from '@/types/database'
+import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useToast } from '@/hooks/use-toast'
 
 interface RecipeItem {
   ingredient_id: string
@@ -12,14 +16,35 @@ interface RecipeItem {
   tempId?: string
 }
 
+type MenuItemStatus = 'active' | 'deactivated'
+
+type MenuItemFormData = {
+  name: string
+  description: string
+  category: string
+  selling_price: string
+  waste_percentage: string
+  labor_cost: string
+  status: MenuItemStatus
+  image_url: string
+}
+
+type RecipeRow = {
+  id: string
+  ingredient_id: string
+  quantity: number
+  ingredients: { name: string } | null
+}
+
+const menuItemStatuses = ['active', 'deactivated'] as const
+
 export default function EditMenuItemPage() {
   const router = useRouter()
-  const [params] = useState(() => {
-    const pathParts = window.location.pathname.split('/')
-    return { id: pathParts[pathParts.length - 1] }
-  })
+  const params = useParams()
+  const { currencySymbol, formatCurrency } = useTenantSettings()
+  const { toast } = useToast()
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<MenuItemFormData>({
     name: '',
     description: '',
     category: '',
@@ -27,18 +52,15 @@ export default function EditMenuItemPage() {
     waste_percentage: '0',
     labor_cost: '0',
     status: 'active',
+    image_url: '',
   })
   const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [ingredients, setIngredients] = useState<any[]>([])
+  const [ingredients, setIngredients] = useState<Ingredient[]>([])
+  const [categories, setCategories] = useState<{ id: string, name: string }[]>([])
 
-  useEffect(() => {
-    loadMenuItem()
-    loadIngredients()
-  }, [params.id])
-
-  const loadIngredients = async () => {
+  const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -49,76 +71,104 @@ export default function EditMenuItemPage() {
       .single()
 
     if (userData) {
-      const { data } = await supabase
+      // Load ingredients
+      const { data: ingredientsData } = await supabase
         .from('ingredients')
         .select('*')
         .eq('tenant_id', userData.tenant_id)
         .eq('status', 'active')
         .order('name')
 
-      setIngredients(data || [])
-    }
-  }
+      setIngredients(((ingredientsData ?? []) as unknown) as Ingredient[])
 
-  const loadMenuItem = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+      // Load categories
+      const { data: categoriesData } = await supabase
+        .from('menu_categories')
+        .select('id, name')
+        .eq('tenant_id', userData.tenant_id)
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+      setCategories(categoriesData ?? [])
 
-    if (userData && params.id) {
-      const [menuItem, recipes] = await Promise.all([
-        supabase
-          .from('menu_items')
-          .select('*')
-          .eq('id', params.id)
-          .eq('tenant_id', userData.tenant_id)
-          .single(),
-        supabase
-          .from('recipe_items')
-          .select(`
-            *,
-            ingredients (name)
-          `)
-          .eq('menu_item_id', params.id),
-      ])
+      if (params.id) {
+        const [menuItem, recipes] = await Promise.all([
+          supabase
+            .from('menu_items')
+            .select('*')
+            .eq('id', params.id)
+            .eq('tenant_id', userData.tenant_id)
+            .single(),
+          supabase
+            .from('recipe_items')
+            .select(`
+              *,
+              ingredients (name)
+            `)
+            .eq('menu_item_id', params.id),
+        ])
 
-      if (menuItem?.data) {
-        setFormData({
-          name: menuItem.data.name,
-          description: menuItem.data.description || '',
-          category: menuItem.data.category || '',
-          selling_price: menuItem.data.selling_price.toString(),
-          waste_percentage: menuItem.data.waste_percentage.toString(),
-          labor_cost: menuItem.data.labor_cost.toString(),
-          status: menuItem.data.status,
-        })
+        if (menuItem?.data) {
+          const statusRaw = String(menuItem.data.status ?? 'active')
+          const status: MenuItemStatus = (menuItemStatuses as readonly string[]).includes(statusRaw)
+            ? (statusRaw as MenuItemStatus)
+            : 'active'
+
+          setFormData({
+            name: menuItem.data.name,
+            description: menuItem.data.description || '',
+            category: menuItem.data.category || '',
+            selling_price: menuItem.data.selling_price.toString(),
+            waste_percentage: menuItem.data.waste_percentage.toString(),
+            labor_cost: menuItem.data.labor_cost.toString(),
+            status,
+            image_url: menuItem.data.image_url || '',
+          })
+        }
+
+        if (recipes?.data) {
+          const rows = (recipes.data as unknown) as RecipeRow[]
+          setRecipeItems(
+            rows.map((r) => ({
+              ingredient_id: r.ingredient_id,
+              quantity: r.quantity,
+              ingredient_name: r.ingredients?.name || 'Unknown',
+              tempId: r.id,
+            }))
+          )
+        }
       }
-
-      if (recipes?.data) {
-        setRecipeItems(recipes.data.map((r: any) => ({
-          ingredient_id: r.ingredient_id,
-          quantity: r.quantity,
-          ingredient_name: r.ingredients?.name || 'Unknown',
-          tempId: r.id,
-        })))
-      }
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadData()
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [loadData])
 
   const addRecipeItem = () => {
-    if (ingredients.length === 0) return
+    if (ingredients.length === 0) {
+      toast({
+        title: "No ingredients found",
+        description: "Please add ingredients in the Inventory section first.",
+        variant: "destructive"
+      })
+      return
+    }
+    const firstIngredient = ingredients[0]
+
     setRecipeItems([
       ...recipeItems,
       {
-        ingredient_id: ingredients[0].id,
+        ingredient_id: firstIngredient.id,
         quantity: 1,
-        ingredient_name: ingredients[0].name,
-        tempId: `new-${Date.now()}`,
+        ingredient_name: firstIngredient.name,
+        tempId: `new-${new Date().getTime()}`,
       },
     ])
   }
@@ -131,13 +181,13 @@ export default function EditMenuItemPage() {
     }
   }
 
-  const updateRecipeItem = (index: number, field: keyof RecipeItem, value: any) => {
+  const updateRecipeItem = (index: number, field: 'ingredient_id' | 'quantity', value: string) => {
     const updated = [...recipeItems]
     if (field === 'ingredient_id') {
-      const ingredient = ingredients.find(i => i.id === value)
+      const ingredient = ingredients.find((i) => i.id === value)
       updated[index] = { ...updated[index], [field]: value, ingredient_name: ingredient?.name || '' }
     } else {
-      updated[index] = { ...updated[index], [field]: value }
+      updated[index] = { ...updated[index], [field]: Number(value) }
     }
     setRecipeItems(updated)
   }
@@ -145,21 +195,56 @@ export default function EditMenuItemPage() {
   const calculateTotals = () => {
     let foodCost = 0
     recipeItems.forEach(item => {
-      const ingredient = ingredients.find(i => i.id === item.ingredient_id)
+      const ingredient = ingredients.find((i) => i.id === item.ingredient_id)
       if (ingredient) {
-        foodCost += item.quantity * Number(ingredient.cost_per_unit)
+        const conversionFactor = ingredient.conversion_factor || 1
+        foodCost += (item.quantity / conversionFactor) * Number(ingredient.cost_per_unit)
       }
     })
 
     const wastePercent = Number(formData.waste_percentage) / 100
-    const foodCostWithWaste = foodCost * (1 + wastePercent)
+    const wasteCost = foodCost * wastePercent
+    const foodCostWithWaste = foodCost + wasteCost
     const laborCost = Number(formData.labor_cost)
     const totalCost = foodCostWithWaste + laborCost
     const sellingPrice = Number(formData.selling_price) || 0
     const margin = sellingPrice - totalCost
     const marginPercent = sellingPrice > 0 ? (margin / sellingPrice) * 100 : 0
 
-    return { foodCostWithWaste, totalCost, margin, marginPercent }
+    return { foodCost, wasteCost, foodCostWithWaste, totalCost, margin, marginPercent }
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      setLoading(true)
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Math.random()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('menu-images')
+        .upload(filePath, file)
+
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('menu-images')
+        .getPublicUrl(filePath)
+
+      setFormData(prev => ({ ...prev, image_url: publicUrl }))
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      toast({
+        title: "Error uploading image",
+        description: "Please try again",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const totals = calculateTotals()
@@ -181,6 +266,7 @@ export default function EditMenuItemPage() {
 
       if (!userData) throw new Error('User not found')
 
+      // Update menu item first
       const { error: updateError } = await supabase
         .from('menu_items')
         .update({
@@ -190,40 +276,71 @@ export default function EditMenuItemPage() {
           selling_price: Number(formData.selling_price),
           waste_percentage: Number(formData.waste_percentage),
           labor_cost: Number(formData.labor_cost),
-          status: formData.status as any,
+          status: formData.status,
+          image_url: formData.image_url,
         })
         .eq('id', params.id)
         .eq('tenant_id', userData.tenant_id)
 
       if (updateError) throw updateError
 
-      const newItems = recipeItems.filter(item => item.tempId?.startsWith('new-'))
-      const existingItems = recipeItems.filter(item => !item.tempId?.startsWith('new-'))
+      // Handle recipe items
+      
+      // 1. Identify items to keep, update, and add
+      const itemsToKeep = recipeItems.filter(item => !item.tempId?.startsWith('new-'))
+      const itemsToAdd = recipeItems.filter(item => item.tempId?.startsWith('new-'))
+      
+      // 2. Delete items that are no longer in the list
+      // We do this by deleting all items for this menu_item that are NOT in the itemsToKeep list
+      const idsToKeep = itemsToKeep.map(item => item.tempId).filter(Boolean) as string[]
+      
+      let deleteQuery = supabase
+        .from('recipe_items')
+        .delete()
+        .eq('menu_item_id', params.id)
+      
+      if (idsToKeep.length > 0) {
+        deleteQuery = deleteQuery.filter('id', 'not.in', `(${idsToKeep.join(',')})`)
+      }
+      
+      const { error: deleteError } = await deleteQuery
+      if (deleteError) throw deleteError
 
-      if (newItems.length > 0) {
-        const recipeInserts = newItems.map(item => ({
+      // 3. Update existing items (quantity might have changed)
+      if (itemsToKeep.length > 0) {
+        for (const item of itemsToKeep) {
+          const { error: updateItemError } = await supabase
+            .from('recipe_items')
+            .update({
+              quantity: item.quantity,
+              ingredient_id: item.ingredient_id
+            })
+            .eq('id', item.tempId)
+          
+          if (updateItemError) throw updateItemError
+        }
+      }
+
+      // 4. Insert new items
+      if (itemsToAdd.length > 0) {
+        const recipeInserts = itemsToAdd.map(item => ({
           menu_item_id: params.id,
           ingredient_id: item.ingredient_id,
           quantity: item.quantity,
         }))
 
-        const { error: recipeError } = await supabase
+        const { error: insertError } = await supabase
           .from('recipe_items')
           .insert(recipeInserts)
 
-        if (recipeError) throw recipeError
+        if (insertError) throw insertError
       }
-
-      const { error: deleteError } = await supabase
-        .from('recipe_items')
-        .delete()
-        .in('id', existingItems.map(item => item.tempId).filter(Boolean) as string[])
-
-      if (deleteError) throw deleteError
 
       router.push('/dashboard/menu')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update menu item')
+      console.error('Error updating menu item:', err)
+      const msg = err instanceof Error ? err.message : (err as any)?.message || 'Failed to update menu item'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -232,9 +349,9 @@ export default function EditMenuItemPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/menu" className="text-primary hover:underline">
+        <Link href="/dashboard/menu" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Edit Menu Item</h1>
       </div>
 
@@ -249,6 +366,49 @@ export default function EditMenuItemPage() {
           <div className="bg-card rounded-lg border p-6">
             <h2 className="text-xl font-bold mb-4">Basic Information</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Image
+                </label>
+                <div className="flex items-center gap-4">
+                  {formData.image_url ? (
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border">
+                      <img 
+                        src={formData.image_url} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, image_url: '' })}
+                        className="absolute top-1 right-1 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-lg border-2 border-dashed flex items-center justify-center text-muted-foreground bg-muted/50">
+                      <Upload size={24} />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      id="image-upload"
+                    />
+                    <label
+                      htmlFor="image-upload"
+                      className="cursor-pointer inline-flex items-center px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 text-sm"
+                    >
+                      {formData.image_url ? 'Change Image' : 'Upload Image'}
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label htmlFor="name" className="block text-sm font-medium mb-2">
                   Name
@@ -277,21 +437,37 @@ export default function EditMenuItemPage() {
               </div>
 
               <div>
-                <label htmlFor="category" className="block text-sm font-medium mb-2">
-                  Category
-                </label>
-                <input
+                <div className="flex justify-between items-center mb-2">
+                  <label htmlFor="category" className="block text-sm font-medium">
+                    Category
+                  </label>
+                  <Link href="/dashboard/menu/categories" className="text-xs text-primary hover:underline" target="_blank">
+                    Manage Categories
+                  </Link>
+                </div>
+                <select
                   id="category"
-                  type="text"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                />
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+                >
+                  <option value="">Select a category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                {categories.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No categories found. <Link href="/dashboard/menu/categories/new" className="text-primary hover:underline">Create one</Link>.
+                  </p>
+                )}
               </div>
 
               <div>
                 <label htmlFor="selling_price" className="block text-sm font-medium mb-2">
-                  Selling Price ($)
+                  Selling Price ({currencySymbol})
                 </label>
                 <input
                   id="selling_price"
@@ -321,7 +497,7 @@ export default function EditMenuItemPage() {
 
                 <div>
                   <label htmlFor="labor_cost" className="block text-sm font-medium mb-2">
-                    Labor Cost ($)
+                    Labor Cost ({currencySymbol})
                   </label>
                   <input
                     id="labor_cost"
@@ -340,7 +516,12 @@ export default function EditMenuItemPage() {
                   <select
                     id="status"
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      if ((menuItemStatuses as readonly string[]).includes(next)) {
+                        setFormData({ ...formData, status: next as MenuItemStatus })
+                      }
+                    }}
                     className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="active">Active</option>
@@ -365,42 +546,68 @@ export default function EditMenuItemPage() {
             </div>
 
             <div className="space-y-3">
-              {recipeItems.map((item, index) => (
-                <div key={item.tempId} className="flex gap-3 items-center">
-                  <select
-                    value={item.ingredient_id}
-                    onChange={(e) => updateRecipeItem(index, 'ingredient_id', e.target.value)}
-                    className="flex-1 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    {ingredients.map((ing) => (
-                      <option key={ing.id} value={ing.id}>
-                        {ing.name} (${Number(ing.cost_per_unit).toFixed(2)}/{ing.unit})
-                      </option>
-                    ))}
-                  </select>
+              {recipeItems.map((item, index) => {
+                const ingredient = ingredients.find((i) => i.id === item.ingredient_id)
+                const unit = ingredient?.usage_unit || ingredient?.unit || ''
+                const cost = ingredient 
+                  ? (item.quantity / (ingredient.conversion_factor || 1)) * Number(ingredient.cost_per_unit)
+                  : 0
 
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={item.quantity}
-                    onChange={(e) => updateRecipeItem(index, 'quantity', parseFloat(e.target.value))}
-                    className="w-24 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                  />
+                return (
+                  <div key={item.tempId} className="flex gap-3 items-center">
+                    <div className="flex-1 flex flex-col gap-1">
+                      <select
+                        value={item.ingredient_id}
+                        onChange={(e) => updateRecipeItem(index, 'ingredient_id', e.target.value)}
+                        className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        {ingredients.map((ing) => (
+                          <option key={ing.id} value={ing.id}>
+                            {ing.name} ({formatCurrency(Number(ing.cost_per_unit))}/{ing.unit})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="text-xs text-muted-foreground px-1">
+                        Cost: {formatCurrency(cost)}
+                      </div>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={() => removeRecipeItem(item.tempId, index)}
-                    className="p-2 text-destructive hover:bg-destructive/10 rounded-md"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.quantity}
+                        onChange={(e) => updateRecipeItem(index, 'quantity', e.target.value)}
+                        className="w-24 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="Qty"
+                      />
+                      <span className="text-sm text-muted-foreground w-8 truncate" title={unit}>
+                        {unit}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeRecipeItem(item.tempId, index)}
+                      className="p-2 text-destructive hover:bg-destructive/10 rounded-md"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )
+              })}
 
               {recipeItems.length === 0 && (
-                <p className="text-muted-foreground text-center py-8">
-                  No ingredients in recipe. Click "Add Ingredient" to start building.
-                </p>
+                <div className="text-center py-8 space-y-2">
+                  <p className="text-muted-foreground">
+                    No ingredients in recipe. Click &quot;Add Ingredient&quot; to start building.
+                  </p>
+                  {ingredients.length === 0 && (
+                    <Link href="/dashboard/ingredients/new" target="_blank" className="text-primary hover:underline text-sm block">
+                      No ingredients found? Create your first ingredient here
+                    </Link>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -412,21 +619,25 @@ export default function EditMenuItemPage() {
 
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Food Cost:</span>
-                <span className="font-medium">${totals.foodCostWithWaste.toFixed(2)}</span>
+                <span className="text-muted-foreground">Ingredients Cost:</span>
+                <span className="font-medium">{formatCurrency(totals.foodCost)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Waste Cost ({formData.waste_percentage}%):</span>
+                <span className="font-medium">{formatCurrency(totals.wasteCost)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Labor Cost:</span>
-                <span className="font-medium">${Number(formData.labor_cost).toFixed(2)}</span>
+                <span className="font-medium">{formatCurrency(Number(formData.labor_cost))}</span>
               </div>
               <div className="border-t pt-3 flex justify-between">
                 <span className="font-medium">Total Cost:</span>
-                <span className="font-bold">${totals.totalCost.toFixed(2)}</span>
+                <span className="font-bold">{formatCurrency(totals.totalCost)}</span>
               </div>
               <div className="border-t pt-3 flex justify-between">
                 <span className="font-medium">Margin:</span>
                 <span className={`font-bold ${totals.margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  ${totals.margin.toFixed(2)} ({totals.marginPercent.toFixed(1)}%)
+                  {formatCurrency(totals.margin)} ({totals.marginPercent.toFixed(1)}%)
                 </span>
               </div>
             </div>

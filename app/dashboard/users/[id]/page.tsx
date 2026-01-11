@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import Link from 'next/link'
 
 async function updateUser(formData: FormData) {
   'use server'
@@ -74,9 +75,9 @@ export default async function UserDetailPage({
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/users" className="text-primary hover:underline">
+        <Link href="/dashboard/users" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Edit User</h1>
       </div>
 

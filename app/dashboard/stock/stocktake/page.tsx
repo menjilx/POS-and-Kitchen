@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { CheckCircle, AlertTriangle } from 'lucide-react'
+import type { Location, Ingredient } from '@/types/database'
 
 interface StockItem {
   id: string
-  stock_id: string
+  ingredient_id: string
   ingredient_name: string
   unit: string
   expected_quantity: number
@@ -26,9 +28,8 @@ export default function StocktakePage() {
   const [stockItems, setStockItems] = useState<StockItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [locations, setLocations] = useState<any[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [stocktakeCreated, setStocktakeCreated] = useState(false)
-  const [stocktakeId, setStocktakeId] = useState<string | null>(null)
 
   useEffect(() => {
     loadLocations()
@@ -55,7 +56,7 @@ export default function StocktakePage() {
     }
   }
 
-  const loadStockItems = async () => {
+  const loadStockItems = useCallback(async () => {
     if (!formData.location_id) return
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -68,38 +69,46 @@ export default function StocktakePage() {
       .single()
 
     if (userData) {
-      const { data } = await supabase
+      // Fetch all active ingredients
+      const { data: ingredients } = await supabase
+        .from('ingredients')
+        .select('*')
+        .eq('tenant_id', userData.tenant_id)
+        .eq('status', 'active')
+        .order('name')
+
+      // Fetch current stock for this location
+      const { data: currentStock } = await supabase
         .from('stock')
-        .select(`
-          id,
-          quantity,
-          ingredients (
-            id,
-            name,
-            unit
-          )
-        `)
+        .select('*')
         .eq('tenant_id', userData.tenant_id)
         .eq('location_id', formData.location_id)
 
-      setStockItems(
-        (data || []).map((item: any) => ({
-          id: item.ingredients?.id || item.ingredient_id,
-          stock_id: item.id,
-          ingredient_name: item.ingredients?.name || 'Unknown',
-          unit: item.ingredients?.unit || 'units',
-          expected_quantity: Number(item.quantity),
-          actual_quantity: Number(item.quantity),
-          variance: 0,
-          variance_percentage: 0,
-        }))
-      )
+      if (ingredients) {
+        const items: StockItem[] = ingredients.map((ing) => {
+          const stockEntry = currentStock?.find((s) => s.ingredient_id === ing.id)
+          const quantity = stockEntry ? Number(stockEntry.quantity) : 0
+
+          return {
+            id: ing.id,
+            ingredient_id: ing.id,
+            ingredient_name: ing.name,
+            unit: ing.unit,
+            expected_quantity: quantity,
+            actual_quantity: quantity,
+            variance: 0,
+            variance_percentage: 0,
+          }
+        })
+
+        setStockItems(items)
+      }
     }
-  }
+  }, [formData.location_id])
 
   useEffect(() => {
     loadStockItems()
-  }, [formData.location_id])
+  }, [loadStockItems])
 
   const updateActualQuantity = (index: number, value: number) => {
     const updated = [...stockItems]
@@ -171,7 +180,21 @@ export default function StocktakePage() {
 
       if (itemsError) throw itemsError
 
-      setStocktakeId(stocktake.id)
+      // Update actual stock levels
+      const stockUpdates = stockItems.map(item => ({
+        tenant_id: userData.tenant_id,
+        location_id: formData.location_id,
+        ingredient_id: item.id,
+        quantity: item.actual_quantity,
+        last_updated: new Date().toISOString()
+      }))
+
+      const { error: stockUpdateError } = await supabase
+        .from('stock')
+        .upsert(stockUpdates, { onConflict: 'ingredient_id, location_id' })
+
+      if (stockUpdateError) throw stockUpdateError
+
       setStocktakeCreated(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create stocktake')
@@ -232,7 +255,7 @@ export default function StocktakePage() {
             }}
             className="flex-1 py-2 px-4 border rounded-md hover:bg-accent"
           >
-            Start New Stocktake
+            Start New Stock
           </button>
         </div>
       </div>
@@ -242,10 +265,10 @@ export default function StocktakePage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/stock" className="text-primary hover:underline">
+        <Link href="/dashboard/stock" className="text-primary hover:underline">
           ← Back
-        </a>
-        <h1 className="text-3xl font-bold">New Stocktake</h1>
+        </Link>
+        <h1 className="text-3xl font-bold">Stock</h1>
       </div>
 
       {error && (

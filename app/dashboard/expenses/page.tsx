@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 
 export default async function ExpensesPage() {
@@ -28,16 +29,33 @@ export default async function ExpensesPage() {
     .order('expense_date', { ascending: false })
     .limit(100)
 
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('settings')
+    .eq('id', userData.tenant_id)
+    .single()
+
+  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
+  const currency = tenantSettings?.currency ?? 'USD'
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Expenses</h1>
-        <a
-          href="/dashboard/expenses/new"
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          New Expense
-        </a>
+        <div className="flex gap-2">
+          <a
+            href="/dashboard/expenses/categories"
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80"
+          >
+            Manage Categories
+          </a>
+          <a
+            href="/dashboard/expenses/new"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            New Expense
+          </a>
+        </div>
       </div>
 
       <div className="bg-card rounded-lg border">
@@ -62,7 +80,7 @@ export default async function ExpensesPage() {
                 </td>
                 <td className="p-4">{expense.description}</td>
                 <td className="p-4 font-medium">
-                  ${Number(expense.amount).toFixed(2)}
+                  {formatCurrency(Number(expense.amount), currency)}
                 </td>
                 <td className="p-4">
                   <a

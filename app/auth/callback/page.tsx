@@ -25,7 +25,7 @@ export default function AuthCallback() {
     }
 
     handleAuthCallback()
-  }, [router, supabase])
+  }, [router])
 
   return (
     <div className="flex items-center justify-center min-h-screen">

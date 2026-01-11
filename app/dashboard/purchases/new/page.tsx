@@ -1,31 +1,52 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Paperclip, X } from 'lucide-react'
+import type { Ingredient, Location, Supplier } from '@/types/database'
+import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { uploadFile } from '@/app/actions/storage'
+
+type PurchaseItemDraft = {
+  ingredient_id: string
+  ingredient_name: string
+  unit: string
+  current_cost: number
+  quantity: number
+  unit_price: number
+  location_id: string
+}
+
+type PurchaseFormData = {
+  supplier_id: string
+  invoice_number: string
+  invoice_date: string
+  notes: string
+}
+
+const defaultInvoiceDate = new Date().toISOString().split('T')[0]
 
 export default function NewPurchasePage() {
   const router = useRouter()
+  const { currencySymbol, formatCurrency } = useTenantSettings()
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PurchaseFormData>({
     supplier_id: '',
     invoice_number: '',
-    invoice_date: new Date().toISOString().split('T')[0],
+    invoice_date: defaultInvoiceDate,
     notes: '',
   })
-  const [purchaseItems, setPurchaseItems] = useState<any[]>([])
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseItemDraft[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [ingredients, setIngredients] = useState<any[]>([])
-  const [suppliers, setSuppliers] = useState<any[]>([])
-  const [locations, setLocations] = useState<any[]>([])
+  const [ingredients, setIngredients] = useState<Ingredient[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
+  const [files, setFiles] = useState<File[]>([])
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -55,24 +76,37 @@ export default function NewPurchasePage() {
           .order('name'),
       ])
 
-      setIngredients(ingredientsRes.data || [])
-      setSuppliers(suppliersRes.data || [])
-      setLocations(locationsRes.data || [])
+      setIngredients(((ingredientsRes.data ?? []) as unknown) as Ingredient[])
+      setSuppliers(((suppliersRes.data ?? []) as unknown) as Supplier[])
+      setLocations(((locationsRes.data ?? []) as unknown) as Location[])
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadData()
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [loadData])
 
   const addPurchaseItem = () => {
-    if (ingredients.length === 0 || locations.length === 0) return
+    const firstIngredient = ingredients[0]
+    const firstLocation = locations[0]
+    if (!firstIngredient || !firstLocation) return
+
     setPurchaseItems([
       ...purchaseItems,
       {
-        ingredient_id: ingredients[0].id,
-        ingredient_name: ingredients[0].name,
-        unit: ingredients[0].unit,
-        current_cost: Number(ingredients[0].cost_per_unit),
+        ingredient_id: firstIngredient.id,
+        ingredient_name: firstIngredient.name,
+        unit: firstIngredient.unit,
+        current_cost: Number(firstIngredient.cost_per_unit),
         quantity: 1,
-        unit_price: Number(ingredients[0].cost_per_unit),
-        location_id: locations[0].id,
+        unit_price: Number(firstIngredient.cost_per_unit),
+        location_id: firstLocation.id,
       },
     ])
   }
@@ -81,16 +115,21 @@ export default function NewPurchasePage() {
     setPurchaseItems(purchaseItems.filter((_, i) => i !== index))
   }
 
-  const updatePurchaseItem = (index: number, field: string, value: any) => {
+  const updatePurchaseItem = (
+    index: number,
+    field: 'ingredient_id' | 'quantity' | 'unit_price' | 'location_id',
+    value: string
+  ) => {
     const updated = [...purchaseItems]
     if (field === 'ingredient_id') {
-      const ingredient = ingredients.find(i => i.id === value)
+      const ingredient = ingredients.find((i) => i.id === value)
       updated[index] = {
         ...updated[index],
         [field]: value,
         ingredient_name: ingredient?.name || '',
         unit: ingredient?.unit || '',
         current_cost: Number(ingredient?.cost_per_unit) || 0,
+        unit_price: Number(ingredient?.cost_per_unit) || 0,
       }
     } else if (field === 'quantity' || field === 'unit_price') {
       updated[index] = { ...updated[index], [field]: Number(value) }
@@ -105,6 +144,17 @@ export default function NewPurchasePage() {
       return sum + (item.quantity * item.unit_price)
     }, 0)
     return total
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files)
+      setFiles(prev => [...prev, ...newFiles])
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setFiles(files.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -132,7 +182,7 @@ export default function NewPurchasePage() {
 
       const totalAmount = calculateTotals()
 
-      const { data: purchase } = await supabase
+      const { data: purchase, error: purchaseError } = await supabase
         .from('purchases')
         .insert({
           tenant_id: userData.tenant_id,
@@ -146,6 +196,7 @@ export default function NewPurchasePage() {
         .select()
         .single()
 
+      if (purchaseError) throw new Error(purchaseError.message)
       if (!purchase) throw new Error('Failed to create purchase')
 
       const purchaseItemInserts = purchaseItems.map(item => ({
@@ -160,10 +211,38 @@ export default function NewPurchasePage() {
         .from('purchase_items')
         .insert(purchaseItemInserts)
 
-      if (itemsError) throw itemsError
+      if (itemsError) throw new Error(itemsError.message)
+
+      // Upload files
+      if (files.length > 0) {
+        const uploadPromises = files.map(async (file) => {
+          const formData = new FormData()
+          formData.append('file', file)
+          const result = await uploadFile(formData)
+          if (!result.success || !result.url) {
+            throw new Error(`Failed to upload file ${file.name}: ${result.error}`)
+          }
+          return {
+            purchase_id: purchase.id,
+            file_name: file.name,
+            file_url: result.url,
+            file_type: file.type,
+            file_size: file.size,
+          }
+        })
+
+        const attachments = await Promise.all(uploadPromises)
+
+        const { error: attachmentsError } = await supabase
+          .from('purchase_attachments')
+          .insert(attachments)
+
+        if (attachmentsError) throw new Error(attachmentsError.message)
+      }
 
       router.push('/dashboard/purchases')
     } catch (err) {
+      console.error('Purchase creation error:', err)
       setError(err instanceof Error ? err.message : 'Failed to create purchase')
     } finally {
       setLoading(false)
@@ -173,9 +252,9 @@ export default function NewPurchasePage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/purchases" className="text-primary hover:underline">
+        <Link href="/dashboard/purchases" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">New Purchase</h1>
       </div>
 
@@ -249,6 +328,47 @@ export default function NewPurchasePage() {
                   placeholder="Any notes..."
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Supporting Documents
+                </label>
+                <div className="flex items-center gap-4">
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer flex items-center gap-2 px-4 py-2 border rounded-md hover:bg-muted"
+                  >
+                    <Paperclip size={16} />
+                    <span>Attach Files</span>
+                    <input
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-sm text-muted-foreground">
+                    {files.length} file(s) selected
+                  </span>
+                </div>
+                {files.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                        <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFile(index)}
+                          className="text-destructive hover:text-destructive/80"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </form>
           </div>
 
@@ -278,7 +398,7 @@ export default function NewPurchasePage() {
                       >
                         {ingredients.map((ing) => (
                           <option key={ing.id} value={ing.id}>
-                            {ing.name} (Current: ${Number(ing.cost_per_unit).toFixed(2)}/{ing.unit})
+                            {ing.name} (Current: {formatCurrency(Number(ing.cost_per_unit))}/{ing.unit})
                           </option>
                         ))}
                       </select>
@@ -308,19 +428,19 @@ export default function NewPurchasePage() {
                         step="0.01"
                         min="0"
                         value={item.quantity}
-                        onChange={(e) => updatePurchaseItem(index, 'quantity', parseFloat(e.target.value))}
+                        onChange={(e) => updatePurchaseItem(index, 'quantity', e.target.value)}
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-1">Unit Price ($)</label>
+                      <label className="block text-sm font-medium mb-1">Unit Price ({currencySymbol})</label>
                       <input
                         type="number"
                         step="0.01"
                         min="0"
                         value={item.unit_price}
-                        onChange={(e) => updatePurchaseItem(index, 'unit_price', parseFloat(e.target.value))}
+                        onChange={(e) => updatePurchaseItem(index, 'unit_price', e.target.value)}
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                       />
                     </div>
@@ -328,11 +448,11 @@ export default function NewPurchasePage() {
                     <div className="flex items-end">
                       <div className="w-full text-right py-2">
                         <div className="text-lg font-bold">
-                          ${(item.quantity * item.unit_price).toFixed(2)}
+                          {formatCurrency(item.quantity * item.unit_price)}
                         </div>
                         {item.unit_price !== item.current_cost && (
                           <div className="text-xs text-muted-foreground">
-                            Previous: ${item.current_cost.toFixed(2)}
+                            Previous: {formatCurrency(item.current_cost)}
                           </div>
                         )}
                       </div>
@@ -350,7 +470,7 @@ export default function NewPurchasePage() {
 
               {purchaseItems.length === 0 && (
                 <p className="text-muted-foreground text-center py-8">
-                  No items added yet. Click "Add Item" to start adding products.
+                  No items added yet. Click &quot;Add Item&quot; to start adding products.
                 </p>
               )}
             </div>
@@ -364,7 +484,7 @@ export default function NewPurchasePage() {
             <div className="space-y-4">
               <div className="flex justify-between text-lg font-bold pt-2">
                 <span>Total:</span>
-                <span>${calculateTotals().toFixed(2)}</span>
+                <span>{formatCurrency(calculateTotals())}</span>
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 
 export default async function ReservationsPage() {
   const supabase = await createClient()
@@ -34,12 +35,12 @@ export default async function ReservationsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Reservations</h1>
-        <a
+        <Link
           href="/dashboard/reservations/new"
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           New Reservation
-        </a>
+        </Link>
       </div>
 
       <div className="bg-card rounded-lg border">
@@ -91,12 +92,12 @@ export default async function ReservationsPage() {
                   </span>
                 </td>
                 <td className="p-4">
-                  <a
+                  <Link
                     href={`/dashboard/reservations/${reservation.id}`}
                     className="text-primary hover:underline"
                   >
                     View
-                  </a>
+                  </Link>
                 </td>
               </tr>
             ))}

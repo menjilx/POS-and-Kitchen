@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { Shield } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -13,21 +14,22 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    checkIfSuperAdmin()
-  }, [])
-
-  const checkIfSuperAdmin = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
+  const checkIfSuperAdmin = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data, error } = await supabase
-      .rpc('is_superadmin')
+    const { data } = await supabase.rpc('is_superadmin')
 
     if (data === true) {
       router.push('/admin')
     }
-  }
+  }, [router])
+
+  useEffect(() => {
+    checkIfSuperAdmin()
+  }, [checkIfSuperAdmin])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,9 +120,9 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="text-center text-sm">
-          <a href="/login" className="text-muted-foreground hover:text-foreground">
+          <Link href="/login" className="text-muted-foreground hover:text-foreground">
             ← Back to regular login
-          </a>
+          </Link>
         </div>
       </div>
     </div>

@@ -1,31 +1,72 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import type { IngredientCategory } from '@/types/database'
+
+type IngredientStatus = 'active' | 'deactivated'
+
+type IngredientFormData = {
+  name: string
+  category_id: string
+  unit: string
+  cost_per_unit: string
+  usage_unit: string
+  conversion_factor: string
+  reorder_level: string
+  status: IngredientStatus
+}
+
 
 export default function NewIngredientPage() {
   const router = useRouter()
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<IngredientFormData>({
     name: '',
     category_id: '',
     unit: '',
     cost_per_unit: '',
+    usage_unit: '',
+    conversion_factor: '1',
     reorder_level: '10',
     status: 'active',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [categories, setCategories] = useState<any[]>([])
+  const [categories, setCategories] = useState<IngredientCategory[]>([])
 
-  useState(() => {
-    supabase
+  const loadCategories = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', user.id)
+      .single()
+
+    if (!userData) return
+
+    const { data } = await supabase
       .from('ingredient_categories')
       .select('*')
+      .eq('tenant_id', userData.tenant_id)
       .order('name')
-      .then(({ data }) => setCategories(data || []))
-  })
+
+    setCategories(((data ?? []) as unknown) as IngredientCategory[])
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void loadCategories()
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [loadCategories])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -50,8 +91,10 @@ export default function NewIngredientPage() {
         category_id: formData.category_id || null,
         unit: formData.unit,
         cost_per_unit: parseFloat(formData.cost_per_unit),
+        usage_unit: formData.usage_unit || formData.unit,
+        conversion_factor: parseFloat(formData.conversion_factor) || 1,
         reorder_level: parseFloat(formData.reorder_level),
-        status: formData.status as any,
+        status: formData.status,
       })
 
       if (error) throw error
@@ -67,9 +110,9 @@ export default function NewIngredientPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/ingredients" className="text-primary hover:underline">
+        <Link href="/dashboard/ingredients" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Add Ingredient</h1>
       </div>
 
@@ -145,6 +188,40 @@ export default function NewIngredientPage() {
                 className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                 placeholder="0.00"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="usage_unit" className="block text-sm font-medium mb-2">
+                Usage Unit (Recipe Unit)
+              </label>
+              <input
+                id="usage_unit"
+                type="text"
+                value={formData.usage_unit}
+                onChange={(e) => setFormData({ ...formData, usage_unit: e.target.value })}
+                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="e.g. ml, g (leave empty if same as Unit)"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="conversion_factor" className="block text-sm font-medium mb-2">
+                Conversion Factor
+              </label>
+              <input
+                id="conversion_factor"
+                type="number"
+                step="0.0001"
+                value={formData.conversion_factor}
+                onChange={(e) => setFormData({ ...formData, conversion_factor: e.target.value })}
+                className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="e.g. 1000 (if 1 Box = 1000 ml)"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                How many Usage Units are in one Stock Unit?
+              </p>
             </div>
           </div>
 

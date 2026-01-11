@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 
 export default async function SalesPage() {
@@ -23,12 +24,21 @@ export default async function SalesPage() {
     .order('sale_time', { ascending: false })
     .limit(50)
 
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('settings')
+    .eq('id', userData.tenant_id)
+    .single()
+
+  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
+  const currency = tenantSettings?.currency ?? 'USD'
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Sales</h1>
         <a
-          href="/dashboard/sales/new"
+          href="/dashboard/pos"
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           New Sale
@@ -52,7 +62,7 @@ export default async function SalesPage() {
               <tr key={sale.id} className="border-b hover:bg-accent">
                 <td className="p-4 font-medium">{sale.order_number}</td>
                 <td className="p-4 capitalize">{sale.sale_type?.replace('_', ' ')}</td>
-                <td className="p-4 font-medium">${Number(sale.total_amount).toFixed(2)}</td>
+                <td className="p-4 font-medium">{formatCurrency(Number(sale.total_amount), currency)}</td>
                 <td className="p-4 capitalize">{sale.payment_method?.replace('_', ' ') || '-'}</td>
                 <td className="p-4">
                   <span

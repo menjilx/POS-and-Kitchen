@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import DashboardLayout from '@/components/dashboard-layout'
-import { fixProfile } from '@/app/actions/auth'
+import { fixProfile, signOut } from '@/app/actions/auth'
 import { Button } from '@/components/ui/button'
 
 export default async function DashboardLayoutWrapper({
@@ -34,20 +34,12 @@ export default async function DashboardLayoutWrapper({
             <p className="text-muted-foreground text-sm">
               We authenticated your account ({user.email}), but your user profile is missing from our database. This usually happens if the signup process was interrupted.
             </p>
-            <form action={async () => {
-              'use server'
-              await fixProfile(user.id, user.email || '')
-            }} className="w-full pt-2">
+            <form action={fixProfile.bind(null, user.id, user.email || '')} className="w-full pt-2">
                <Button type="submit" className="w-full" variant="default">
                  Complete Account Setup
                </Button>
             </form>
-            <form action={async () => {
-              'use server'
-              const sb = await createClient()
-              await sb.auth.signOut()
-              redirect('/login')
-            }} className="w-full">
+            <form action={signOut} className="w-full">
                <Button type="submit" variant="ghost" className="w-full">
                  Sign Out
                </Button>
@@ -58,5 +50,19 @@ export default async function DashboardLayoutWrapper({
     )
   }
 
-  return <DashboardLayout user={userData}>{children}</DashboardLayout>
+  const { data: tenantData } = userData.tenant_id
+    ? await supabase
+        .from('tenants')
+        .select('name')
+        .eq('id', userData.tenant_id)
+        .single()
+    : { data: null }
+
+  const tenantName = tenantData?.name ?? 'Restaurant'
+
+  return (
+    <DashboardLayout user={userData} tenantName={tenantName}>
+      {children}
+    </DashboardLayout>
+  )
 }

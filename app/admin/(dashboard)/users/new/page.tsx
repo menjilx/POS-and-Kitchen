@@ -21,7 +21,7 @@ export default function AdminAddSuperadminPage() {
     try {
       // Create auth user with superadmin role and NO tenant_id
       // The trigger will automatically create the public user profile with tenant_id = NULL
-      const { data: { user }, error: authError } = await supabase.auth.signUp({
+      const { error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: Math.random().toString(36).substring(2, 10),
         options: {

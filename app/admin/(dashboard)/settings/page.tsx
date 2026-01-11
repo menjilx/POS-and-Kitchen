@@ -14,20 +14,6 @@ const categories = [
   { id: 'security', label: 'Security', icon: Shield },
 ]
 
-const popularTimezones = [
-  'UTC', 'America/New_York', 'America/Los_Angeles', 'America/Chicago',
-  'America/Denver', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
-  'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Dubai',
-  'Australia/Sydney', 'Pacific/Auckland'
-]
-
-const popularCurrencies = [
-  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'CAD', 'AUD', 'SGD', 'INR', 'KRW', 'BRL', 'MXN'
-]
-
-const dateFormats = ['YYYY-MM-DD', 'MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY/MM/DD']
-const languages = ['en', 'es', 'fr', 'de', 'zh', 'ja', 'ko']
-
 interface SettingFieldProps {
   label: string
   description?: string
@@ -52,7 +38,17 @@ function SettingField({ label, description, children, error }: SettingFieldProps
   )
 }
 
-function Input({ value, onChange, type = 'text', placeholder, className }: any) {
+type SettingFormValue = string | number | boolean
+
+interface InputProps {
+  value: string | number
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  type?: string
+  placeholder?: string
+  className?: string
+}
+
+function Input({ value, onChange, type = 'text', placeholder, className }: InputProps) {
   return (
     <input
       type={type}
@@ -64,7 +60,15 @@ function Input({ value, onChange, type = 'text', placeholder, className }: any) 
   )
 }
 
-function Select({ value, onChange, options, placeholder, className }: any) {
+interface SelectProps {
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void
+  options: string[]
+  placeholder: string
+  className?: string
+}
+
+function Select({ value, onChange, options, placeholder, className }: SelectProps) {
   return (
     <div className="relative">
       <select
@@ -101,17 +105,20 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function SettingsPage() {
-  const { settings, loading, bulkUpdateSettings, getSetting } = useAppSettings()
+  const { settings, loading, bulkUpdateSettings } = useAppSettings()
   const [activeTab, setActiveTab] = useState('general')
   const [saving, setSaving] = useState(false)
-  const [formData, setFormData] = useState<Record<string, any>>({})
+  const [formData, setFormData] = useState<Record<string, SettingFormValue>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    if (settings) {
-      const data: Record<string, any> = {}
+    if (!settings) return
+
+    let cancelled = false
+    ;(async () => {
+      const data: Record<string, SettingFormValue> = {}
       Object.entries(settings).forEach(([key, setting]) => {
-        let value: any = setting.value
+        let value: SettingFormValue = setting.value
         if (setting.value_type === 'boolean') {
           value = setting.value === 'true'
         } else if (setting.value_type === 'number') {
@@ -119,11 +126,18 @@ export default function SettingsPage() {
         }
         data[key] = value
       })
+
+      await Promise.resolve()
+      if (cancelled) return
       setFormData(data)
+    })()
+
+    return () => {
+      cancelled = true
     }
   }, [settings])
 
-  const handleChange = (key: string, value: any) => {
+  const handleChange = (key: string, value: SettingFormValue) => {
     setFormData(prev => ({ ...prev, [key]: value }))
     setErrors(prev => ({ ...prev, [key]: '' }))
   }
@@ -132,29 +146,41 @@ export default function SettingsPage() {
     const newErrors: Record<string, string> = {}
     
     if (category === 'general') {
-      if (!formData.app_name?.trim()) newErrors.app_name = 'App name is required'
-      if (!formData.timezone) newErrors.timezone = 'Timezone is required'
+      const appName = typeof formData.app_name === 'string' ? formData.app_name : ''
+      const timezone = typeof formData.timezone === 'string' ? formData.timezone : ''
+      if (!appName.trim()) newErrors.app_name = 'App name is required'
+      if (!timezone) newErrors.timezone = 'Timezone is required'
     }
     
     if (category === 'business') {
-      if (!formData.currency) newErrors.currency = 'Currency is required'
-      const taxRate = parseFloat(formData.tax_rate)
+      const currency = typeof formData.currency === 'string' ? formData.currency : ''
+      if (!currency) newErrors.currency = 'Currency is required'
+
+      const taxRateValue = formData.tax_rate
+      const taxRate =
+        typeof taxRateValue === 'number'
+          ? taxRateValue
+          : parseFloat(typeof taxRateValue === 'string' ? taxRateValue : '')
       if (isNaN(taxRate) || taxRate < 0 || taxRate > 100) {
         newErrors.tax_rate = 'Tax rate must be between 0 and 100'
       }
     }
     
     if (category === 'restaurant') {
-      if (!formData.opening_time || !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(formData.opening_time)) {
+      const openingTime = typeof formData.opening_time === 'string' ? formData.opening_time : ''
+      const closingTime = typeof formData.closing_time === 'string' ? formData.closing_time : ''
+
+      if (!openingTime || !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(openingTime)) {
         newErrors.opening_time = 'Invalid time format (HH:MM)'
       }
-      if (!formData.closing_time || !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(formData.closing_time)) {
+      if (!closingTime || !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(closingTime)) {
         newErrors.closing_time = 'Invalid time format (HH:MM)'
       }
     }
     
     if (category === 'smtp') {
-      if (formData.smtp_from_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.smtp_from_email)) {
+      const fromEmail = typeof formData.smtp_from_email === 'string' ? formData.smtp_from_email : ''
+      if (fromEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromEmail)) {
         newErrors.smtp_from_email = 'Invalid email format'
       }
     }
@@ -255,7 +281,9 @@ export default function SettingsPage() {
               {getCategorySettings(activeTab).map(([key, setting]) => {
                 const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
                 const value = formData[key]
-                const options = (setting.options as any)?.options || []
+                const options = Array.isArray(setting.options)
+                  ? setting.options
+                  : setting.options?.options ?? []
                 const description = setting.description
 
                 if (setting.value_type === 'boolean') {
@@ -284,8 +312,8 @@ export default function SettingsPage() {
                       error={errors[key]}
                     >
                       <Select
-                        value={value || ''}
-                        onChange={(e: any) => handleChange(key, e.target.value)}
+                        value={typeof value === 'string' ? value : ''}
+                        onChange={(e) => handleChange(key, e.target.value)}
                         options={options}
                         placeholder={`Select ${label.toLowerCase()}`}
                         className={errors[key] ? 'border-red-500' : ''}
@@ -302,8 +330,8 @@ export default function SettingsPage() {
                     error={errors[key]}
                   >
                     <Input
-                      value={value || ''}
-                      onChange={(e: any) => handleChange(key, e.target.value)}
+                      value={typeof value === 'number' || typeof value === 'string' ? value : ''}
+                      onChange={(e) => handleChange(key, e.target.value)}
                       type={setting.value_type === 'number' ? 'number' : 'text'}
                       placeholder={`Enter ${label.toLowerCase()}`}
                       className={errors[key] ? 'border-red-500' : ''}

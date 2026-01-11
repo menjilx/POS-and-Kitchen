@@ -1,6 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import Link from 'next/link'
+import type { Reservation, ReservationStatus, Table } from '@/types/database'
+
+const reservationStatuses = [
+  'pending',
+  'confirmed',
+  'seated',
+  'completed',
+  'cancelled',
+  'no_show',
+] as const
 
 async function updateReservation(formData: FormData) {
   'use server'
@@ -30,7 +41,10 @@ async function updateReservation(formData: FormData) {
   const partySize = parseInt(formData.get('partySize') as string)
   const reservationTime = formData.get('reservationTime') as string
   const durationMinutes = parseInt(formData.get('durationMinutes') as string)
-  const status = formData.get('status') as string
+  const statusRaw = String(formData.get('status') ?? '')
+  const status: ReservationStatus = (reservationStatuses as readonly string[]).includes(statusRaw)
+    ? (statusRaw as ReservationStatus)
+    : 'pending'
   const specialRequests = formData.get('specialRequests') as string
   const notes = formData.get('notes') as string
 
@@ -44,7 +58,7 @@ async function updateReservation(formData: FormData) {
       party_size: partySize,
       reservation_time: new Date(reservationTime).toISOString(),
       duration_minutes: durationMinutes,
-      status: status as any,
+      status,
       special_requests: specialRequests || null,
       notes: notes || null,
     })
@@ -99,12 +113,15 @@ export default async function EditReservationPage({
     notFound()
   }
 
+  const reservationRow = reservation.data as Reservation
+  const tableRows = (tables?.data ?? []) as Table[]
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/reservations" className="text-primary hover:underline">
+        <Link href="/dashboard/reservations" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Edit Reservation</h1>
       </div>
 
@@ -120,7 +137,7 @@ export default async function EditReservationPage({
             type="text"
             name="customerName"
             required
-            defaultValue={reservation?.data?.customer_name}
+            defaultValue={reservationRow.customer_name ?? ''}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -134,7 +151,7 @@ export default async function EditReservationPage({
               id="customerPhone"
               type="tel"
               name="customerPhone"
-              defaultValue={reservation?.data?.customer_phone}
+              defaultValue={reservationRow.customer_phone ?? ''}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -147,7 +164,7 @@ export default async function EditReservationPage({
               id="customerEmail"
               type="email"
               name="customerEmail"
-              defaultValue={reservation?.data?.customer_email}
+              defaultValue={reservationRow.customer_email ?? ''}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -164,7 +181,7 @@ export default async function EditReservationPage({
               name="partySize"
               min="1"
               required
-              defaultValue={reservation?.data?.party_size}
+              defaultValue={reservationRow.party_size ?? 1}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -178,7 +195,11 @@ export default async function EditReservationPage({
               type="datetime-local"
               name="reservationTime"
               required
-              defaultValue={new Date(reservation?.data?.reservation_time || '').toISOString().slice(0, 16)}
+              defaultValue={
+                reservationRow.reservation_time
+                  ? new Date(reservationRow.reservation_time).toISOString().slice(0, 16)
+                  : ''
+              }
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -192,7 +213,7 @@ export default async function EditReservationPage({
               type="number"
               name="durationMinutes"
               min="15"
-              defaultValue={reservation?.data?.duration_minutes}
+              defaultValue={reservationRow.duration_minutes ?? 90}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -205,11 +226,11 @@ export default async function EditReservationPage({
           <select
             id="tableId"
             name="tableId"
-            defaultValue={reservation?.data?.table_id || ''}
+            defaultValue={reservationRow.table_id || ''}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="">Select table (optional)</option>
-            {tables?.data?.map((table: any) => (
+            {tableRows.map((table) => (
               <option key={table.id} value={table.id}>
                 Table {table.table_number} (Capacity: {table.capacity})
               </option>
@@ -224,7 +245,7 @@ export default async function EditReservationPage({
           <select
             id="status"
             name="status"
-            defaultValue={reservation?.data?.status}
+            defaultValue={reservationRow.status ?? 'pending'}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="pending">Pending</option>
@@ -243,7 +264,7 @@ export default async function EditReservationPage({
           <textarea
             id="specialRequests"
             name="specialRequests"
-            defaultValue={reservation?.data?.special_requests}
+            defaultValue={reservationRow.special_requests ?? ''}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             rows={3}
             placeholder="e.g., Birthday celebration, dietary restrictions..."
@@ -257,7 +278,7 @@ export default async function EditReservationPage({
           <textarea
             id="notes"
             name="notes"
-            defaultValue={reservation?.data?.notes}
+            defaultValue={reservationRow.notes ?? ''}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             rows={3}
             placeholder="Internal notes..."

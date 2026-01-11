@@ -2,12 +2,23 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
+import type { TableStatus } from '@/types/database'
+
+type TableFormData = {
+  table_number: string
+  capacity: string
+  location: string
+  status: TableStatus
+}
+
+const tableStatuses = ['available', 'occupied', 'reserved', 'cleaning'] as const
 
 export default function NewTablePage() {
   const router = useRouter()
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<TableFormData>({
     table_number: '',
     capacity: '',
     location: '',
@@ -38,7 +49,7 @@ export default function NewTablePage() {
         table_number: formData.table_number,
         capacity: parseInt(formData.capacity),
         location: formData.location,
-        status: formData.status as any,
+        status: formData.status,
       })
 
       if (error) throw error
@@ -54,9 +65,9 @@ export default function NewTablePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/tables" className="text-primary hover:underline">
+        <Link href="/dashboard/tables" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Add Table</h1>
       </div>
 
@@ -122,7 +133,12 @@ export default function NewTablePage() {
             <select
               id="status"
               value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              onChange={(e) => {
+                const next = e.target.value
+                if ((tableStatuses as readonly string[]).includes(next)) {
+                  setFormData({ ...formData, status: next as TableStatus })
+                }
+              }}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             >
               <option value="available">Available</option>

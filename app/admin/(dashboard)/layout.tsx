@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Shield, Building2, Users, Settings, LogOut, Menu, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Shield, Building2, Users, Settings, LogOut, Menu, ChevronLeft } from 'lucide-react'
 
 async function getSuperAdminStatus() {
   const supabase = await createClient()
@@ -58,13 +59,13 @@ export default async function AdminDashboardLayout({
                 <span>Logout</span>
               </button>
             </form>
-            <a
+            <Link
               href="/dashboard"
               className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors text-left text-sm text-slate-400"
             >
               <ChevronLeft size={16} />
               <span>Back to App</span>
-            </a>
+            </Link>
           </div>
         </div>
       </aside>
@@ -84,14 +85,22 @@ export default async function AdminDashboardLayout({
   )
 }
 
-function NavLink({ href, icon: Icon, label }: { href: string; icon: any; label: string }) {
+function NavLink({
+  href,
+  icon: Icon,
+  label,
+}: {
+  href: string
+  icon: React.ComponentType<{ size?: number }>
+  label: string
+}) {
   return (
-    <a
+    <Link
       href={href}
       className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors"
     >
       <Icon size={20} />
       <span>{label}</span>
-    </a>
+    </Link>
   )
 }

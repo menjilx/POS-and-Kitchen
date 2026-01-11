@@ -63,7 +63,7 @@ const SignUpForm = () => {
 
       if (tenantError) throw tenantError;
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
@@ -87,12 +87,12 @@ const SignUpForm = () => {
       });
 
       router.push("/login?message=Account created successfully");
-    } catch (err: any) {
-      console.error("Signup error:", JSON.stringify(err, null, 2));
+    } catch (err: unknown) {
+      console.error("Signup error:", err);
       toast({
         variant: "destructive",
         title: "Signup failed",
-        description: err?.message || "An error occurred during signup",
+        description: err instanceof Error ? err.message : "An error occurred during signup",
       });
     } finally {
       setLoading(false);

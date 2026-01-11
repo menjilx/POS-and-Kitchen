@@ -22,6 +22,16 @@ export async function proxy(request: NextRequest) {
   const supabase = await createClient()
   const path = request.nextUrl.pathname
 
+  if (path === "/@vite/client" || path.startsWith("/@vite/")) {
+    return new NextResponse("/* noop */\n", {
+      status: 200,
+      headers: {
+        "content-type": "application/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    })
+  }
+
   const { data: { session } } = await supabase.auth.getSession()
 
   if (path === '/admin/login') {

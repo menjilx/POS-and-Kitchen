@@ -1,0 +1,2 @@
+-- Intentionally minimal.
+-- Supabase CLI requires this file due to supabase/config.toml [db.seed.sql_paths].

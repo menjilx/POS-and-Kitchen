@@ -3,11 +3,23 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { Eye, Shield, UserX, Search } from 'lucide-react'
+import { Eye, Search } from 'lucide-react'
+import type { User } from '@/types/database'
+
+type TenantSummary = {
+  id: string
+  name: string
+  email: string
+  is_suspended: boolean | null
+}
+
+type UserWithTenant = User & {
+  tenants: TenantSummary | null
+}
 
 export default function AdminUsersPage() {
   const router = useRouter()
-  const [users, setUsers] = useState<any[]>([])
+  const [users, setUsers] = useState<UserWithTenant[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTenant, setSelectedTenant] = useState('')
@@ -28,7 +40,7 @@ export default function AdminUsersPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setUsers(data || [])
+      setUsers(((data ?? []) as unknown) as UserWithTenant[])
     } catch (err) {
       console.error('Failed to load users:', err)
     } finally {
@@ -46,12 +58,12 @@ export default function AdminUsersPage() {
     )
   })
 
-  const handleImpersonate = async (userId: string, tenantId: string) => {
+  const handleImpersonate = async (userId: string) => {
     if (!confirm('You will be logged in as this user. Continue?')) return
 
     try {
       await supabase.auth.signOut()
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: 'system@internal.admin',
         password: process.env.NEXT_PUBLIC_SUPERADMIN_PASSWORD || '',
       })
@@ -89,9 +101,13 @@ export default function AdminUsersPage() {
             className="px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="">All Tenants</option>
-            {[...new Set(users.map(u => u.tenants?.id).filter(Boolean))].map(tenantId => {
-              const tenant = users.find(u => u.tenants?.id === tenantId)?.tenants
-              return tenant ? <option key={tenantId} value={tenantId}>{tenant.name}</option> : null
+            {[...new Set(users.map((u) => u.tenants?.id).filter(Boolean))].map((tenantId) => {
+              const tenant = users.find((u) => u.tenants?.id === tenantId)?.tenants
+              return tenant ? (
+                <option key={tenantId} value={tenantId}>
+                  {tenant.name}
+                </option>
+              ) : null
             })}
           </select>
         </div>
@@ -115,7 +131,9 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.map((user) => (
+              {filteredUsers
+                .filter((user) => (!selectedTenant ? true : user.tenants?.id === selectedTenant))
+                .map((user) => (
                 <tr key={user.id} className="border-b hover:bg-accent">
                   <td className="p-4">
                     <div className="font-medium">{user.full_name || 'N/A'}</div>
@@ -149,7 +167,7 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="p-4">
                     <button
-                      onClick={() => handleImpersonate(user.id, user.tenant_id || '')}
+                      onClick={() => handleImpersonate(user.id)}
                       className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent text-sm"
                     >
                       <Eye size={16} />

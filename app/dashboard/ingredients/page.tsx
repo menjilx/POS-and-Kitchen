@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
+import { formatCurrency } from '@/lib/utils'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 
 export default async function IngredientsPage() {
   const supabase = await createClient()
@@ -27,16 +29,33 @@ export default async function IngredientsPage() {
     .eq('tenant_id', userData.tenant_id)
     .order('name')
 
+  const { data: tenantData } = await supabase
+    .from('tenants')
+    .select('settings')
+    .eq('id', userData.tenant_id)
+    .single()
+
+  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
+  const currency = tenantSettings?.currency ?? 'USD'
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Ingredients</h1>
-        <a
-          href="/dashboard/ingredients/new"
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          Add Ingredient
-        </a>
+        <div className="flex gap-4">
+          <Link
+            href="/dashboard/ingredient-categories"
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90"
+          >
+            Manage Categories
+          </Link>
+          <Link
+            href="/dashboard/ingredients/new"
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+          >
+            Add Ingredient
+          </Link>
+        </div>
       </div>
 
       <div className="bg-card rounded-lg border">
@@ -45,7 +64,9 @@ export default async function IngredientsPage() {
             <tr className="border-b">
               <th className="text-left p-4">Name</th>
               <th className="text-left p-4">Category</th>
-              <th className="text-left p-4">Unit</th>
+              <th className="text-left p-4">Stock Unit</th>
+              <th className="text-left p-4">Usage Unit</th>
+              <th className="text-left p-4">Conversion</th>
               <th className="text-left p-4">Cost/Unit</th>
               <th className="text-left p-4">Reorder Level</th>
               <th className="text-left p-4">Status</th>
@@ -60,8 +81,14 @@ export default async function IngredientsPage() {
                   {ingredient.ingredient_categories?.name || '-'}
                 </td>
                 <td className="p-4">{ingredient.unit}</td>
+                <td className="p-4">{ingredient.usage_unit || '-'}</td>
                 <td className="p-4">
-                  ${Number(ingredient.cost_per_unit).toFixed(2)}
+                  {ingredient.conversion_factor && ingredient.conversion_factor !== 1
+                    ? `1 ${ingredient.unit} = ${ingredient.conversion_factor} ${ingredient.usage_unit || ''}`
+                    : '-'}
+                </td>
+                <td className="p-4">
+                  {formatCurrency(Number(ingredient.cost_per_unit), currency)}
                 </td>
                 <td className="p-4">{ingredient.reorder_level}</td>
                 <td className="p-4">
@@ -76,12 +103,12 @@ export default async function IngredientsPage() {
                   </span>
                 </td>
                 <td className="p-4">
-                  <a
+                  <Link
                     href={`/dashboard/ingredients/${ingredient.id}`}
                     className="text-primary hover:underline"
                   >
                     Edit
-                  </a>
+                  </Link>
                 </td>
               </tr>
             ))}

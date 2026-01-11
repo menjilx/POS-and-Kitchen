@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import Link from 'next/link'
+import type { Ingredient, IngredientCategory } from '@/types/database'
+
+type IngredientStatus = 'active' | 'deactivated'
+
+const ingredientStatuses = ['active', 'deactivated'] as const
 
 async function updateIngredient(formData: FormData) {
   'use server'
@@ -27,8 +33,13 @@ async function updateIngredient(formData: FormData) {
   const categoryId = formData.get('categoryId') as string
   const unit = formData.get('unit') as string
   const costPerUnit = parseFloat(formData.get('costPerUnit') as string)
+  const usageUnit = formData.get('usageUnit') as string
+  const conversionFactor = parseFloat(formData.get('conversionFactor') as string)
   const reorderLevel = parseFloat(formData.get('reorderLevel') as string)
-  const status = formData.get('status') as string
+  const statusRaw = String(formData.get('status') ?? '')
+  const status: IngredientStatus = (ingredientStatuses as readonly string[]).includes(statusRaw)
+    ? (statusRaw as IngredientStatus)
+    : 'active'
 
   const { error } = await supabase
     .from('ingredients')
@@ -37,6 +48,8 @@ async function updateIngredient(formData: FormData) {
       category_id: categoryId || null,
       unit,
       cost_per_unit: costPerUnit,
+      usage_unit: usageUnit || unit,
+      conversion_factor: conversionFactor || 1,
       reorder_level: reorderLevel,
       status,
     })
@@ -54,8 +67,9 @@ async function updateIngredient(formData: FormData) {
 export default async function EditIngredientPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -77,7 +91,7 @@ export default async function EditIngredientPage({
     supabase
       .from('ingredients')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('tenant_id', userData.tenant_id)
       .single(),
     supabase
@@ -87,21 +101,24 @@ export default async function EditIngredientPage({
       .order('name'),
   ])
 
-  if (!ingredient) {
+  if (ingredient.error || !ingredient.data) {
     notFound()
   }
+
+  const ingredientRow = ingredient.data as Ingredient
+  const categoryRows = ((categories.data ?? []) as unknown) as IngredientCategory[]
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/ingredients" className="text-primary hover:underline">
+        <Link href="/dashboard/ingredients" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Edit Ingredient</h1>
       </div>
 
       <form action={updateIngredient} className="bg-card rounded-lg border p-6 space-y-6">
-        <input type="hidden" name="ingredientId" value={ingredient?.data?.id} />
+        <input type="hidden" name="ingredientId" value={ingredientRow.id} />
 
         <div>
           <label htmlFor="name" className="block text-sm font-medium mb-2">
@@ -112,9 +129,43 @@ export default async function EditIngredientPage({
             type="text"
             name="name"
             required
-            defaultValue={ingredient?.data?.name}
+            defaultValue={ingredientRow.name}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="usage_unit" className="block text-sm font-medium mb-2">
+              Usage Unit (Recipe Unit)
+            </label>
+            <input
+              id="usage_unit"
+              type="text"
+              name="usageUnit"
+              defaultValue={ingredientRow.usage_unit || ingredientRow.unit}
+              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="e.g. ml, g"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="conversion_factor" className="block text-sm font-medium mb-2">
+              Conversion Factor
+            </label>
+            <input
+              id="conversion_factor"
+              type="number"
+              name="conversionFactor"
+              step="0.0001"
+              defaultValue={ingredientRow.conversion_factor || 1}
+              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="e.g. 1000"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              How many Usage Units are in one Stock Unit?
+            </p>
+          </div>
         </div>
 
         <div>
@@ -124,11 +175,11 @@ export default async function EditIngredientPage({
           <select
             id="category"
             name="categoryId"
-            defaultValue={ingredient?.data?.category_id || ''}
+            defaultValue={ingredientRow.category_id || ''}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="">Select category (optional)</option>
-            {categories?.data?.map((cat: any) => (
+            {categoryRows.map((cat) => (
               <option key={cat.id} value={cat.id}>
                 {cat.name}
               </option>
@@ -146,7 +197,7 @@ export default async function EditIngredientPage({
               type="text"
               name="unit"
               required
-              defaultValue={ingredient?.data?.unit}
+              defaultValue={ingredientRow.unit}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -161,7 +212,7 @@ export default async function EditIngredientPage({
               name="costPerUnit"
               step="0.01"
               required
-              defaultValue={ingredient?.data?.cost_per_unit}
+              defaultValue={ingredientRow.cost_per_unit}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
@@ -177,7 +228,7 @@ export default async function EditIngredientPage({
             name="reorderLevel"
             step="0.01"
             required
-            defaultValue={ingredient?.data?.reorder_level}
+            defaultValue={ingredientRow.reorder_level}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -189,7 +240,7 @@ export default async function EditIngredientPage({
           <select
             id="status"
             name="status"
-            defaultValue={ingredient?.data?.status}
+            defaultValue={ingredientRow.status ?? 'active'}
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="active">Active</option>
