@@ -2,7 +2,6 @@
 
 
 import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { User } from "lucide-react"
 
@@ -46,7 +45,7 @@ export function OrderQueue({ orders }: OrderQueueProps) {
       <h2 className="text-xl font-semibold mb-4">Order Queue</h2>
       <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
         {orders.map((order) => (
-          <Card key={order.id} className="min-w-[250px] flex-shrink-0">
+          <Card key={order.id} className="min-w-62.5 shrink-0">
             <CardContent className="p-4">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">

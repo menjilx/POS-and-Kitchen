@@ -356,7 +356,7 @@ export default function NewPurchasePage() {
                   <div className="mt-4 space-y-2">
                     {files.map((file, index) => (
                       <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                        <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                        <span className="text-sm truncate max-w-50">{file.name}</span>
                         <button
                           type="button"
                           onClick={() => handleRemoveFile(index)}

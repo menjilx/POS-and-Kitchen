@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   Truck,
   Users,
+  ScrollText,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -146,6 +147,12 @@ const navGroups: NavGroup[] = [
       {
         title: "Reports",
         url: "/dashboard/reports",
+        icon: FileText,
+        roles: ["owner", "manager"],
+      },
+      {
+        title: "Register Sessions",
+        url: "/dashboard/reports/registers",
         icon: FileText,
         roles: ["owner", "manager"],
       },

@@ -11,15 +11,20 @@ import {
   RefreshCw, 
   Save, 
   Loader2,
-  TicketPercent
+  TicketPercent,
+  Receipt as ReceiptIcon,
+  Upload
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useToast } from '@/hooks/use-toast'
+import { PrintableReceipt, ReceiptSettings } from '@/components/receipt/printable-receipt'
+import { uploadFile } from '@/app/actions/storage'
 
 interface TenantSettings {
   currency: string
   timezone: string
   tax_rate: number
+  receipt?: ReceiptSettings
 }
 
 interface KitchenDisplay {
@@ -45,7 +50,21 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<TenantSettings>({
     currency: 'USD',
     timezone: 'UTC',
-    tax_rate: 0
+    tax_rate: 0,
+    receipt: {
+      showLogo: false,
+      headerText: 'SHOP NAME',
+      address: 'Address: Lorem Ipsum, 23-10\nTelp. 11223344',
+      phoneNumber: '11223344',
+      footerText: 'THANK YOU!',
+      showCashier: true,
+      showOrderNumber: true,
+      showDate: true,
+      showCustomerName: true,
+      showTax: true,
+      showDiscount: true,
+      showQrCode: true
+    }
   })
   const [displays, setDisplays] = useState<KitchenDisplay[]>([])
   const [newDisplayName, setNewDisplayName] = useState('')
@@ -58,6 +77,7 @@ export default function SettingsPage() {
   })
   const [creatingDiscount, setCreatingDiscount] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [tenantId, setTenantId] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
@@ -83,7 +103,15 @@ export default function SettingsPage() {
         .single()
 
       if (tenantData?.settings) {
-        setSettings(tenantData.settings as unknown as TenantSettings)
+        const loadedSettings = tenantData.settings as unknown as TenantSettings
+        setSettings({
+          ...settings,
+          ...loadedSettings,
+          receipt: {
+            ...settings.receipt!,
+            ...loadedSettings.receipt
+          }
+        })
       }
 
       // Fetch kitchen displays
@@ -371,6 +399,53 @@ export default function SettingsPage() {
     }
   }
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!tenantId) {
+        toast({
+            title: 'Error',
+            description: 'Tenant ID not found',
+            variant: 'destructive'
+        })
+        return
+    }
+
+    setUploadingLogo(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const result = await uploadFile(formData)
+      
+      if (!result.success || !result.url) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      setSettings({
+        ...settings,
+        receipt: { ...settings.receipt!, logoUrl: result.url }
+      })
+
+      toast({
+        title: 'Success',
+        description: 'Logo uploaded successfully',
+      })
+    } catch (error) {
+      console.error('Error uploading logo:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to upload logo',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingLogo(false)
+      // Reset the input
+      e.target.value = ''
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -387,7 +462,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="lg:w-64 flex-shrink-0">
+        <div className="lg:w-64 shrink-0">
           <nav className="space-y-1">
             <button
               onClick={() => setActiveTab('general')}
@@ -421,6 +496,17 @@ export default function SettingsPage() {
             >
               <TicketPercent size={20} />
               <span>Discounts</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('receipt')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === 'receipt'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <ReceiptIcon size={20} />
+              <span>Receipt</span>
             </button>
           </nav>
         </div>
@@ -627,6 +713,197 @@ export default function SettingsPage() {
                     No discounts created yet.
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'receipt' && settings.receipt && (
+            <div className="flex flex-col xl:flex-row gap-6">
+              {/* Left Column: Settings Form */}
+              <div className="flex-1 bg-white rounded-lg border p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-800">Receipt Settings</h2>
+                  <button
+                    onClick={handleSaveSettings}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />}
+                    Save Changes
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Header Section */}
+                  <div className="space-y-4 border-b pb-4">
+                    <h3 className="font-semibold text-lg">Header</h3>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Show Logo</label>
+                      <input
+                        type="checkbox"
+                        checked={settings.receipt.showLogo}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, showLogo: e.target.checked }
+                        })}
+                        className="h-5 w-5"
+                      />
+                    </div>
+                    {settings.receipt.showLogo && (
+                      <div className="grid gap-2">
+                        <label className="text-sm font-medium">Logo</label>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex gap-2 items-center">
+                                <label 
+                                    htmlFor="logo-upload" 
+                                    className={`flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 border rounded-md cursor-pointer text-sm font-medium transition-colors ${uploadingLogo ? 'opacity-50 pointer-events-none' : ''}`}
+                                >
+                                    {uploadingLogo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                                    {uploadingLogo ? 'Uploading...' : 'Upload Image'}
+                                </label>
+                                <input
+                                    id="logo-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleLogoUpload}
+                                    className="hidden"
+                                    disabled={uploadingLogo}
+                                />
+                                <span className="text-xs text-muted-foreground">or enter URL below</span>
+                            </div>
+                            <input
+                            type="text"
+                            value={settings.receipt.logoUrl || ''}
+                            onChange={(e) => setSettings({
+                                ...settings,
+                                receipt: { ...settings.receipt!, logoUrl: e.target.value }
+                            })}
+                            placeholder="https://example.com/logo.png"
+                            className="w-full px-3 py-2 border rounded-md"
+                            />
+                        </div>
+                      </div>
+                    )}
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">Header Text</label>
+                      <input
+                        type="text"
+                        value={settings.receipt.headerText}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, headerText: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border rounded-md"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">Address</label>
+                      <textarea
+                        value={settings.receipt.address}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, address: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">Phone Number</label>
+                      <input
+                        type="text"
+                        value={settings.receipt.phoneNumber}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, phoneNumber: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border rounded-md"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Content Options */}
+                  <div className="space-y-4 border-b pb-4">
+                    <h3 className="font-semibold text-lg">Content Options</h3>
+                    {[
+                      { label: 'Show Cashier Name', key: 'showCashier' },
+                      { label: 'Show Order Number', key: 'showOrderNumber' },
+                      { label: 'Show Date', key: 'showDate' },
+                      { label: 'Show Customer Name', key: 'showCustomerName' },
+                      { label: 'Show Tax', key: 'showTax' },
+                      { label: 'Show Discount', key: 'showDiscount' },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center justify-between">
+                        <label className="text-sm font-medium">{item.label}</label>
+                        <input
+                          type="checkbox"
+                          checked={settings.receipt![item.key as keyof ReceiptSettings] as boolean}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            receipt: { ...settings.receipt!, [item.key]: e.target.checked }
+                          })}
+                          className="h-5 w-5"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Footer Section */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg">Footer</h3>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">Footer Text</label>
+                      <textarea
+                        value={settings.receipt.footerText}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, footerText: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Show QR Code</label>
+                      <input
+                        type="checkbox"
+                        checked={settings.receipt.showQrCode}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, showQrCode: e.target.checked }
+                        })}
+                        className="h-5 w-5"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Preview */}
+              <div className="xl:w-[400px] shrink-0">
+                <div className="bg-slate-100 rounded-lg border p-6 sticky top-6">
+                  <h3 className="font-semibold text-lg mb-4 text-center">Live Preview</h3>
+                  <div className="bg-white shadow-lg mx-auto overflow-hidden">
+                    <PrintableReceipt
+                      settings={settings.receipt}
+                      data={{
+                        items: [
+                          { name: 'Double Cheeseburger', quantity: 1, price: 12.99 },
+                          { name: 'French Fries (L)', quantity: 2, price: 4.50 },
+                          { name: 'Coke Zero', quantity: 2, price: 2.00 },
+                        ],
+                        subtotal: 25.99,
+                        tax: 2.08,
+                        discount: 0,
+                        total: 28.07,
+                        cashierName: 'Sarah M.',
+                        customerName: 'John Doe',
+                        orderNumber: 'ORD-0042',
+                        date: new Date().toLocaleString(),
+                        paymentMethod: 'cash',
+                        currency: settings.currency
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

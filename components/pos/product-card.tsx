@@ -17,12 +17,13 @@ interface ProductCardProps {
 export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$" }: ProductCardProps) {
   return (
     <Card className={`overflow-hidden transition-all hover:shadow-md ${quantity > 0 ? "ring-2 ring-primary" : ""}`}>
-      <div className="aspect-[4/3] bg-muted relative flex items-center justify-center">
+      <div className="aspect-4/3 bg-muted relative flex items-center justify-center">
         {item.image_url ? (
-          <img 
+          <Image 
             src={item.image_url} 
             alt={item.name} 
-            className="w-full h-full object-cover" 
+            fill
+            className="object-cover" 
           />
         ) : (
           <ImageIcon className="h-10 w-10 text-muted-foreground opacity-50" />

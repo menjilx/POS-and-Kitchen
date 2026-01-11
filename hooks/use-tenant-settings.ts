@@ -7,6 +7,21 @@ export type TenantSettings = {
   currency: string
   timezone: string
   tax_rate: number
+  receipt?: {
+    showLogo: boolean
+    logoUrl?: string
+    headerText: string
+    address: string
+    phoneNumber: string
+    footerText: string
+    showCashier: boolean
+    showOrderNumber: boolean
+    showDate: boolean
+    showCustomerName: boolean
+    showTax: boolean
+    showDiscount: boolean
+    showQrCode: boolean
+  }
 }
 
 type UseTenantSettingsResult = {
@@ -22,6 +37,20 @@ const defaultSettings: TenantSettings = {
   currency: 'USD',
   timezone: 'UTC',
   tax_rate: 0,
+  receipt: {
+    showLogo: false,
+    headerText: 'SHOP NAME',
+    address: 'Address: Lorem Ipsum, 23-10\nTelp. 11223344',
+    phoneNumber: '11223344',
+    footerText: 'THANK YOU!',
+    showCashier: true,
+    showOrderNumber: true,
+    showDate: true,
+    showCustomerName: true,
+    showTax: true,
+    showDiscount: true,
+    showQrCode: true
+  }
 }
 
 export function useTenantSettings(): UseTenantSettingsResult {

@@ -318,6 +318,24 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'created_at'>
         Update: Partial<Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'tenant_id' | 'created_at'>>
       }
+      cashier_sessions: {
+        Row: {
+          id: string
+          tenant_id: string
+          user_id: string
+          opening_amount: number
+          closing_amount: number | null
+          expected_cash_amount: number | null
+          opening_time: string
+          closing_time: string | null
+          status: 'open' | 'closed'
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['cashier_sessions']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Database['public']['Tables']['cashier_sessions']['Row'], 'id' | 'tenant_id' | 'user_id' | 'created_at'>>
+      }
     }
   }
 }

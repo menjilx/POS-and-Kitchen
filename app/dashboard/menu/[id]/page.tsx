@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from "next/image"
 import { supabase } from '@/lib/supabase/client'
 import { Trash2, Plus, Upload, X } from 'lucide-react'
 import type { Ingredient } from '@/types/database'
@@ -339,7 +340,7 @@ export default function EditMenuItemPage() {
       router.push('/dashboard/menu')
     } catch (err) {
       console.error('Error updating menu item:', err)
-      const msg = err instanceof Error ? err.message : (err as any)?.message || 'Failed to update menu item'
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || 'Failed to update menu item'
       setError(msg)
     } finally {
       setLoading(false)
@@ -373,10 +374,11 @@ export default function EditMenuItemPage() {
                 <div className="flex items-center gap-4">
                   {formData.image_url ? (
                     <div className="relative w-24 h-24 rounded-lg overflow-hidden border">
-                      <img 
+                      <Image 
                         src={formData.image_url} 
                         alt="Preview" 
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                       <button
                         type="button"

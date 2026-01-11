@@ -44,7 +44,7 @@ export function DailySalesChart({
         <CardDescription>Last 14 days</CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[260px] w-full">
+        <ChartContainer config={chartConfig} className="aspect-auto h-65 w-full">
           <AreaChart accessibilityLayer data={data} margin={{ left: 8, right: 8 }}>
             <CartesianGrid vertical={false} />
             <XAxis

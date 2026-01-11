@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { LayoutGrid, List } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -75,7 +76,7 @@ export function MenuGrid({ items, currency }: MenuGridProps) {
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">Columns:</span>
             <Select value={columns} onValueChange={setColumns}>
-              <SelectTrigger className="w-[70px] h-8">
+              <SelectTrigger className="w-17.5 h-8">
                 <SelectValue placeholder="Cols" />
               </SelectTrigger>
               <SelectContent>
@@ -105,10 +106,11 @@ export function MenuGrid({ items, currency }: MenuGridProps) {
               <div key={item.id} className="bg-card rounded-lg border overflow-hidden flex flex-col hover:shadow-md transition-shadow">
                 {item.image_url && (
                   <div className="h-48 w-full relative bg-muted">
-                    <img
+                    <Image
                       src={item.image_url}
                       alt={item.name}
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
                     />
                   </div>
                 )}
@@ -181,11 +183,12 @@ export function MenuGrid({ items, currency }: MenuGridProps) {
                     <td className="p-3">
                       <div className="flex items-center gap-3">
                         {item.image_url && (
-                          <div className="h-8 w-8 rounded overflow-hidden bg-muted flex-shrink-0">
-                            <img
+                          <div className="h-8 w-8 rounded overflow-hidden bg-muted shrink-0 relative">
+                            <Image
                               src={item.image_url}
                               alt={item.name}
-                              className="w-full h-full object-cover"
+                              fill
+                              className="object-cover"
                             />
                           </div>
                         )}

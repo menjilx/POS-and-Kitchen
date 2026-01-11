@@ -38,6 +38,8 @@ export type KDSOrderItem = Tables['kds_order_items']['Row']
 export type ExpenseCategory = Tables['expense_categories']['Row']
 export type Expense = Tables['expenses']['Row']
 
+export type CashierSession = Tables['cashier_sessions']['Row']
+
 export type UserRole = 'owner' | 'manager' | 'staff' | 'superadmin'
 export type UserStatus = 'active' | 'deactivated'
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Coffee, Utensils, Wine, Pizza, Fish, Carrot, Soup, IceCream, Search } from "lucide-react"
+import { Coffee, Utensils, Wine, Pizza, Fish, Carrot, Soup, IceCream } from "lucide-react"
 
 interface CategoryFilterProps {
   categories: string[]
@@ -29,7 +29,7 @@ export function CategoryFilter({ categories, selectedCategory, onSelect }: Categ
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
         <Button
           variant={selectedCategory === null ? "default" : "outline"}
-          className="flex flex-col items-center justify-center h-auto py-3 px-4 min-w-[100px] gap-2"
+          className="flex flex-col items-center justify-center h-auto py-3 px-4 min-w-25 gap-2"
           onClick={() => onSelect(null)}
         >
           <Utensils className="h-6 w-6" />
@@ -39,7 +39,7 @@ export function CategoryFilter({ categories, selectedCategory, onSelect }: Categ
           <Button
             key={category}
             variant={selectedCategory === category ? "default" : "outline"}
-            className="flex flex-col items-center justify-center h-auto py-3 px-4 min-w-[100px] gap-2"
+            className="min-w-25 h-12 flex-col gap-1 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
             onClick={() => onSelect(category)}
           >
             <div className="[&>svg]:h-6 [&>svg]:w-6">

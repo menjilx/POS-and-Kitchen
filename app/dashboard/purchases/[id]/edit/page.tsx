@@ -27,6 +27,17 @@ type PurchaseFormData = {
   notes: string
 }
 
+type PurchaseAttachment = {
+  id: string
+  file_name: string
+  file_path: string
+  file_size: number
+  file_type: string
+  created_at: string
+  purchase_id: string
+  tenant_id: string
+}
+
 export default function EditPurchasePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { id } = use(params)
@@ -46,7 +57,7 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [files, setFiles] = useState<File[]>([])
-  const [existingAttachments, setExistingAttachments] = useState<any[]>([])
+  const [existingAttachments, setExistingAttachments] = useState<PurchaseAttachment[]>([])
 
   const loadData = useCallback(async () => {
     try {
@@ -118,7 +129,14 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
       })
 
       // Map existing items
-      const items = purchase.purchase_items.map((item: any) => ({
+      const items = purchase.purchase_items.map((item: {
+        id: string
+        ingredient_id: string
+        ingredients: { name: string; unit: string; cost_per_unit: number } | null
+        quantity: number
+        unit_price: number
+        location_id: string
+      }) => ({
         id: item.id,
         ingredient_id: item.ingredient_id,
         ingredient_name: item.ingredients?.name || '',
@@ -476,7 +494,7 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
                   <div className="mt-4 space-y-2">
                     {files.map((file, index) => (
                       <div key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                        <span className="text-sm truncate max-w-[200px]">{file.name}</span>
+                        <span className="text-sm truncate max-w-50">{file.name}</span>
                         <button
                           type="button"
                           onClick={() => handleRemoveFile(index)}

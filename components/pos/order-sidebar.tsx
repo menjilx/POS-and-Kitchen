@@ -6,8 +6,8 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { MenuItem, Table } from "@/types/database"
-import { Trash2, MoreHorizontal, Edit2, Copy, TicketPercent } from "lucide-react"
+import { MenuItem, Table, SaleType } from "@/types/database"
+import { Trash2, MoreHorizontal, Copy, TicketPercent } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -37,6 +37,8 @@ interface OrderSidebarProps {
   setOrderType: (type: "dine_in" | "takeout" | "delivery") => void
   customerName: string
   setCustomerName: (name: string) => void
+  orderNote?: string
+  setOrderNote?: (note: string) => void
   tableId: string
   setTableId: (id: string) => void
   tables: Table[]
@@ -58,6 +60,8 @@ interface OrderSidebarProps {
   onSelectDiscount: (id: string | null) => void
   customDiscount?: { type: 'percentage' | 'fixed', value: number }
   setCustomDiscount?: (discount: { type: 'percentage' | 'fixed', value: number }) => void
+  onCloseRegister?: () => void
+  onTaxChange?: (rate: number) => void
 }
 
 export function OrderSidebar({
@@ -86,7 +90,9 @@ export function OrderSidebar({
   selectedDiscountId,
   onSelectDiscount,
   customDiscount = { type: 'percentage', value: 0 },
-  setCustomDiscount
+  setCustomDiscount,
+  onCloseRegister,
+  onTaxChange
 }: OrderSidebarProps) {
   const { toast } = useToast()
 
@@ -130,8 +136,17 @@ export function OrderSidebar({
                 Copy Order ID
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              {onCloseRegister && (
+                <>
+                  <DropdownMenuItem onClick={onCloseRegister}>
+                    <TicketPercent className="mr-2 h-4 w-4" />
+                    Close Register
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem 
-                className="text-destructive focus:text-destructive" 
+                className="text-destructive focus:text-destructive"  
                 onClick={onClearCart}
                 disabled={cartItems.length === 0}
               >
@@ -192,7 +207,7 @@ export function OrderSidebar({
         ) : (
           cartItems.map(({ item, quantity }) => (
             <div key={item.id} className="flex gap-3">
-              <div className="h-12 w-12 bg-muted rounded-md flex items-center justify-center flex-shrink-0">
+              <div className="h-12 w-12 bg-muted rounded-md flex items-center justify-center shrink-0">
                 {/* Placeholder Image */}
                  <div className="h-8 w-8 bg-primary/10 rounded-full" />
               </div>
@@ -279,8 +294,23 @@ export function OrderSidebar({
              </div>
           )}
 
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Tax ({taxRate}%)</span>
+          <div className="flex justify-between items-center text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Tax ({taxRate}%)</span>
+               {onTaxChange && (
+                 <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onTaxChange(0)}>
+                        <span className="text-[10px]">0%</span>
+                    </Button>
+                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onTaxChange(5)}>
+                        <span className="text-[10px]">5%</span>
+                    </Button>
+                     <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onTaxChange(10)}>
+                        <span className="text-[10px]">10%</span>
+                    </Button>
+                 </div>
+               )}
+            </div>
             <span>{formatCurrency(tax, currency)}</span>
           </div>
           <Separator />

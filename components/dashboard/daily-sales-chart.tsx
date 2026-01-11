@@ -44,7 +44,7 @@ export function DailySalesChart({
           color: "hsl(var(--chart-1))",
         },
       }}
-      className="h-[300px] w-full"
+      className="h-75 w-full"
     >
       <BarChart data={data}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
