@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import type { IngredientCategory } from '@/types/database'
 
 async function updateCategory(formData: FormData) {
   'use server'

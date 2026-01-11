@@ -101,7 +101,7 @@ const SignUpForm = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="relative max-w-sm w-full border rounded-xl px-8 py-8 shadow-lg/5 dark:shadow-xl bg-gradient-to-b from-muted/50 dark:from-transparent to-card overflow-hidden">
+      <div className="relative max-w-sm w-full border rounded-xl px-8 py-8 shadow-lg/5 dark:shadow-xl bg-linear-to-b from-muted/50 dark:from-transparent to-card overflow-hidden">
         <div
           className="absolute inset-0 z-0 -top-px -left-px"
           style={{

@@ -308,7 +308,8 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
       // We can do it in a loop or separate arrays.
       
       const itemsToUpdate = itemsToUpsert.filter(i => i.id)
-      const itemsToInsert = itemsToUpsert.filter(i => !i.id).map(({ id, ...rest }) => rest)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const itemsToInsert = itemsToUpsert.filter(i => !i.id).map(({ id: _, ...rest }) => rest)
 
       if (itemsToUpdate.length > 0) {
         for (const item of itemsToUpdate) {
@@ -458,7 +459,7 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
                         <p className="text-sm font-medium text-muted-foreground">Existing Files:</p>
                         {existingAttachments.map((file) => (
                             <div key={file.id} className="flex items-center justify-between p-2 bg-muted/50 border rounded-md">
-                                <span className="text-sm truncate max-w-[200px]">{file.file_name}</span>
+                                <span className="text-sm truncate max-w-50">{file.file_name}</span>
                                 <button
                                     type="button"
                                     onClick={() => handleRemoveExistingAttachment(file.id)}

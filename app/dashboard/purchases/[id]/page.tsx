@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatCurrency } from '@/lib/utils'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, FileText, Calendar, DollarSign, Building, Paperclip, Download, Edit } from 'lucide-react'
+import { ArrowLeft, FileText, Calendar, Building, Paperclip, Download, Edit } from 'lucide-react'
 import type { PurchaseItem, Ingredient, Location } from '@/types/database'
 
 type PurchaseAttachment = {

@@ -30,7 +30,7 @@ export function DailySalesChart({
 
   if (!data.length) {
     return (
-      <div className="flex h-[300px] w-full items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-75 w-full items-center justify-center text-sm text-muted-foreground">
         No sales data
       </div>
     )

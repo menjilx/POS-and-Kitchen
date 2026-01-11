@@ -104,14 +104,14 @@ export default function SettingsPage() {
 
       if (tenantData?.settings) {
         const loadedSettings = tenantData.settings as unknown as TenantSettings
-        setSettings({
-          ...settings,
+        setSettings(prev => ({
+          ...prev,
           ...loadedSettings,
           receipt: {
-            ...settings.receipt!,
+            ...prev.receipt!,
             ...loadedSettings.receipt
           }
-        })
+        }))
       }
 
       // Fetch kitchen displays
@@ -681,7 +681,7 @@ export default function SettingsPage() {
                 <button
                   onClick={handleCreateDiscount}
                   disabled={creatingDiscount || !newDiscount.name || !newDiscount.value}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-50 min-w-[100px]"
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-50 min-w-25"
                 >
                   {creatingDiscount ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus size={16} />}
                   Add
@@ -804,7 +804,7 @@ export default function SettingsPage() {
                           ...settings,
                           receipt: { ...settings.receipt!, address: e.target.value }
                         })}
-                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                        className="w-full px-3 py-2 border rounded-md min-h-20"
                       />
                     </div>
                     <div className="grid gap-2">
@@ -858,7 +858,7 @@ export default function SettingsPage() {
                           ...settings,
                           receipt: { ...settings.receipt!, footerText: e.target.value }
                         })}
-                        className="w-full px-3 py-2 border rounded-md min-h-[80px]"
+                        className="w-full px-3 py-2 border rounded-md min-h-20"
                       />
                     </div>
                     <div className="flex items-center justify-between">
@@ -878,7 +878,7 @@ export default function SettingsPage() {
               </div>
 
               {/* Right Column: Preview */}
-              <div className="xl:w-[400px] shrink-0">
+              <div className="xl:w-100 shrink-0">
                 <div className="bg-slate-100 rounded-lg border p-6 sticky top-6">
                   <h3 className="font-semibold text-lg mb-4 text-center">Live Preview</h3>
                   <div className="bg-white shadow-lg mx-auto overflow-hidden">

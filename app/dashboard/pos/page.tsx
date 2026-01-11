@@ -513,7 +513,7 @@ export default function POSPage() {
       return saleId
   }
   
-  const handlePaymentComplete = async (method: string, amount: number, isHouseAccount: boolean) => {
+  const handlePaymentComplete = async (method: string, _amount: number, _isHouseAccount: boolean) => {
       setIsProcessing(true)
       try {
           // If house account, we might want to record it differently, but for now just 'house_account' method
@@ -586,7 +586,7 @@ export default function POSPage() {
   }
 
   return (
-    <div className="absolute top-[var(--header-height)] left-0 right-0 bottom-0 flex overflow-hidden bg-background md:rounded-b-xl">
+    <div className="absolute top-(--header-height) left-0 right-0 bottom-0 flex overflow-hidden bg-background md:rounded-b-xl">
       {/* Left Content */}
       <div className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
         {/* Header / Search */}

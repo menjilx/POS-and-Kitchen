@@ -75,7 +75,6 @@ export function OrderSidebar({
   tables,
   cartItems,
   onRemoveItem,
-  onUpdateQuantity,
   onHoldOrder,
   onPay,
   onClearCart,
@@ -262,7 +261,7 @@ export function OrderSidebar({
                   value={customDiscount.type} 
                   onValueChange={(v) => setCustomDiscount({ ...customDiscount, type: v as 'percentage' | 'fixed' })}
                 >
-                  <SelectTrigger className="w-[110px] h-8 text-xs">
+                  <SelectTrigger className="w-27.5 h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

@@ -242,7 +242,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="lg:w-64 flex-shrink-0">
+        <div className="lg:w-64 shrink-0">
           <nav className="space-y-1">
             {categories.map(({ id, label, icon: Icon }) => {
               const isActive = activeTab === id

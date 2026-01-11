@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { CheckCircle, AlertTriangle } from 'lucide-react'
-import type { Location, Ingredient } from '@/types/database'
+import type { Location } from '@/types/database'
 
 interface StockItem {
   id: string

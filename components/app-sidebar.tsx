@@ -17,7 +17,6 @@ import {
   SlidersHorizontal,
   Truck,
   Users,
-  ScrollText,
 } from "lucide-react"
 
 import { NavUser } from "@/components/nav-user"

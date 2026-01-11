@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 
 export default function NewIngredientCategoryPage() {
@@ -50,9 +51,9 @@ export default function NewIngredientCategoryPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-4">
-        <a href="/dashboard/ingredient-categories" className="text-primary hover:underline">
+        <Link href="/dashboard/ingredient-categories" className="text-primary hover:underline">
           ← Back
-        </a>
+        </Link>
         <h1 className="text-3xl font-bold">Add Category</h1>
       </div>
 
