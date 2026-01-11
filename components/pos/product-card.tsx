@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { MenuItem } from "@/types/database"
 import { Plus, Minus, Image as ImageIcon } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import NextImage from "next/image"
 
 interface ProductCardProps {
   item: MenuItem
@@ -19,7 +20,7 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$" }:
     <Card className={`overflow-hidden transition-all hover:shadow-md ${quantity > 0 ? "ring-2 ring-primary" : ""}`}>
       <div className="aspect-4/3 bg-muted relative flex items-center justify-center">
         {item.image_url ? (
-          <Image 
+          <NextImage 
             src={item.image_url} 
             alt={item.name} 
             fill
