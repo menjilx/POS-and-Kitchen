@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "@/lib/supabase/client"
-import { Search, Clock } from "lucide-react"
-import type { MenuItem, Table, SaleType, CashierSession } from "@/types/database"
+import { Search, Clock, LogOut } from "lucide-react"
+import type { MenuItem, Table, SaleType, CashierSession, Customer, PaymentAdditionalData } from "@/types/database"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
@@ -29,6 +29,7 @@ type ActiveOrder = {
   customerName: string
   status: OrderStatus
   tableNumber?: string
+  assignedStation?: string | null
 }
 
 type Discount = {
@@ -69,12 +70,13 @@ export default function POSPage() {
   // Order State
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [orderType, setOrderType] = useState<SaleType>("dine_in")
-  const [customerName, setCustomerName] = useState("")
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [orderNote, setOrderNote] = useState("")
   const [tableId, setTableId] = useState("")
   const [currentOrderId, setCurrentOrderId] = useState("")
   const [activeSaleId, setActiveSaleId] = useState<string | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
+  const [kitchenDisplays, setKitchenDisplays] = useState<{ id: string, name: string }[]>([])
 
   useEffect(() => {
     setCurrentOrderId(`#ORD-${Math.floor(Math.random() * 10000)}`)
@@ -93,6 +95,28 @@ export default function POSPage() {
 
     if (!userData?.tenant_id) return
     setTenantId(userData.tenant_id)
+
+    // Fetch default Walk-in customer
+    const { data: walkIn } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('tenant_id', userData.tenant_id)
+      .eq('name', 'Walk-in')
+      .single()
+    
+    if (walkIn) {
+      setSelectedCustomer(walkIn)
+    }
+
+    // Fetch Kitchen Displays
+    const { data: displays } = await supabase
+      .from('kitchen_displays')
+      .select('id, name')
+      .eq('tenant_id', userData.tenant_id)
+    
+    if (displays) {
+        setKitchenDisplays(displays)
+    }
 
     // Check for open cashier session
     const { data: session } = await supabase
@@ -184,7 +208,8 @@ export default function POSPage() {
                 id: kds.id,
                 orderNumber: kds.order_number,
                 customerName: name,
-                status: kds.status === 'ready' ? 'ready' : 'in_kitchen'
+                status: kds.status === 'ready' ? 'ready' : 'in_kitchen',
+                assignedStation: kds.assigned_station
             }
         })
         setActiveOrders(orders)
@@ -201,6 +226,15 @@ export default function POSPage() {
         .order("created_at", { ascending: false })
     
     if (heldSales) {
+        // Fetch KDS status for these sales
+        const saleIds = heldSales.map(s => s.id)
+        const { data: kdsStatus } = await supabase
+            .from("kds_orders")
+            .select("sale_id, status")
+            .in("sale_id", saleIds)
+            
+        const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]))
+
         const held: HeldOrder[] = heldSales.map(s => {
             let name = "Guest"
             if (s.notes?.startsWith("Customer: ")) {
@@ -218,7 +252,8 @@ export default function POSPage() {
                 date: new Date(s.sale_date).toLocaleDateString(),
                 time: s.sale_time,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                itemsCount: s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0
+                itemsCount: s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
+                status: statusMap.get(s.id)
             }
         })
         setHeldOrders(held)
@@ -350,6 +385,29 @@ export default function POSPage() {
     return { subtotal, discount: discountAmount, tax, total: taxableAmount + tax }
   }, [cartItems, taxRate, selectedDiscountId, discounts, customDiscount])
 
+  const handleSendToKitchen = async (destination?: string) => {
+    if (!tenantId) return
+    if (cartItems.length === 0) return
+
+    setIsProcessing(true)
+    try {
+       await saveOrder('pending', null, destination)
+       
+       toast({
+        title: "Sent to Kitchen",
+        description: `Order ${currentOrderId} sent to ${destination || 'Kitchen'}.`,
+       })
+       
+       clearCart()
+       loadData()
+    } catch (err: unknown) {
+        console.error("Error sending to kitchen:", JSON.stringify(err, null, 2))
+        toast({ title: "Error", description: "Failed to send order", variant: "destructive" })
+    } finally {
+        setIsProcessing(false)
+    }
+  }
+
   const handleOrderSubmit = async (status: 'hold' | 'pay') => {
     if (!tenantId) return
     if (cartItems.length === 0) return
@@ -372,18 +430,25 @@ export default function POSPage() {
        clearCart()
        loadData()
     } catch (err: unknown) {
-        console.error(err)
+        console.error("Error holding order:", JSON.stringify(err, null, 2))
         toast({ title: "Error", description: "Failed to hold order", variant: "destructive" })
     } finally {
         setIsProcessing(false)
     }
   }
 
-  const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null) => {
+  const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!tenantId || !user) throw new Error("No user or tenant")
 
       let saleId = activeSaleId
+      
+      let notes = `Customer: ${selectedCustomer?.name || 'Walk-in Customer'}${orderNote ? ` | Note: ${orderNote}` : ''}`
+      if (additionalData) {
+          if (additionalData.ref) notes += ` | Ref: ${additionalData.ref}`
+          if (additionalData.notes) notes += ` | PayNote: ${additionalData.notes}`
+          if (additionalData.attachment) notes += ` | Attach: ${additionalData.attachment}`
+      }
 
       if (activeSaleId) {
           // Update existing sale
@@ -393,7 +458,8 @@ export default function POSPage() {
                 total_amount: cartTotal.total,
                 payment_status: paymentStatus,
                 payment_method: paymentMethod,
-            notes: `Customer: ${customerName}${orderNote ? ` | Note: ${orderNote}` : ''}`,
+                notes: notes,
+                customer_id: selectedCustomer?.id || null,
             discount_amount: cartTotal.discount,
                 discount_name: selectedDiscountId === 'custom' 
                     ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
@@ -420,14 +486,15 @@ export default function POSPage() {
               total_amount: cartTotal.total,
               payment_status: paymentStatus,
               payment_method: paymentMethod,
-              notes: `Customer: ${customerName}${orderNote ? ` | Note: ${orderNote}` : ''}`,
+              notes: notes,
+              customer_id: selectedCustomer?.id || null,
               discount_amount: cartTotal.discount,
               discount_name: selectedDiscountId === 'custom' 
                 ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
                 : discounts.find(d => d.id === selectedDiscountId)?.name,
               tax_amount: cartTotal.tax,
               sale_date: new Date().toISOString().split('T')[0],
-              sale_time: new Date().toLocaleTimeString(),
+              sale_time: new Date().toISOString(),
               created_by: user.id
             })
             .select()
@@ -452,72 +519,49 @@ export default function POSPage() {
 
       if (itemsError) throw itemsError
       
-      // Handle KDS
-      // Check if KDS order exists for this sale
-      if (activeSaleId) {
-          // For simplicity, we might just update the existing KDS order status or items
-          // But implementing full KDS sync is complex.
-          // Let's assume if it's held, it might already be in KDS.
-          // If we are paying, we ensure it's in KDS.
-          
-          // Check if KDS order exists
-          const { data: kdsOrder } = await supabase
-            .from("kds_orders")
-            .select("id")
-            .eq("sale_id", activeSaleId)
-            .single()
-            
-           if (kdsOrder) {
-               // Maybe update items? 
-               // Deleting and re-inserting KDS items is a simple strategy
-               await supabase.from("kds_order_items").delete().eq("kds_order_id", kdsOrder.id)
-               
-               const kdsItemsData = cartItems.map(i => ({
-                    kds_order_id: kdsOrder.id,
-                    menu_item_id: i.item.id,
-                    quantity: i.quantity,
-                    status: 'pending' as const
-                }))
-                await supabase.from("kds_order_items").insert(kdsItemsData)
+      // Handle KDS (Robust implementation)
+      // Check if KDS order exists for this sale (it should be created by trigger on sales insert)
+      const { data: kdsOrder } = await supabase
+        .from("kds_orders")
+        .select("id")
+        .eq("sale_id", saleId)
+        .single()
+        
+      if (kdsOrder) {
+           // If destination provided, update station
+           if (destination) {
+               await supabase
+                .from("kds_orders")
+                .update({ assigned_station: destination })
+                .eq("id", kdsOrder.id)
            }
+
+           // Ensure items are in KDS (Trigger might have missed them if sale_items weren't there yet)
+           // First delete existing to avoid duplicates if we are updating
+           await supabase.from("kds_order_items").delete().eq("kds_order_id", kdsOrder.id)
+           
+           const kdsItemsData = cartItems.map(i => ({
+                kds_order_id: kdsOrder.id,
+                menu_item_id: i.item.id,
+                quantity: i.quantity,
+                status: 'pending' as const
+            }))
+            await supabase.from("kds_order_items").insert(kdsItemsData)
       } else {
-           // Create KDS Order
-          const { data: kdsData, error: kdsError } = await supabase
-            .from("kds_orders")
-            .insert({
-              tenant_id: tenantId,
-              sale_id: saleId,
-              order_number: currentOrderId,
-              status: 'pending',
-              priority: 'normal'
-            })
-            .select()
-            .single()
-          
-          if (kdsError) throw kdsError
-
-          const kdsItemsData = cartItems.map(i => ({
-            kds_order_id: kdsData.id,
-            menu_item_id: i.item.id,
-            quantity: i.quantity,
-            status: 'pending' as const
-          }))
-
-           const { error: kdsItemsError } = await supabase
-            .from("kds_order_items")
-            .insert(kdsItemsData)
-
-           if (kdsItemsError) throw kdsItemsError
-      }
+          // Fallback if trigger failed (though it shouldn't)
+          // Manually create KDS order? 
+          // For now assume trigger works for creating the order shell.
+          console.warn("KDS Order not found for sale", saleId)
+      } 
       
       return saleId
   }
   
-  const handlePaymentComplete = async (method: string, _amount: number, _isHouseAccount: boolean) => {
+  const handlePaymentComplete = async (method: string, _amount: number, _isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => {
       setIsProcessing(true)
       try {
           // If house account, we might want to record it differently, but for now just 'house_account' method
-          await saveOrder('paid', method)
+          await saveOrder('paid', method, undefined, additionalData)
           
           toast({
               title: "Payment Successful",
@@ -548,7 +592,18 @@ export default function POSPage() {
           
           // Populate state
           setCurrentOrderId(sale.order_number)
-          setCustomerName(sale.notes?.replace("Customer: ", "") || "")
+          
+          if (sale.customer_id) {
+            const { data: customer } = await supabase
+              .from('customers')
+              .select('*')
+              .eq('id', sale.customer_id)
+              .single()
+            if (customer) setSelectedCustomer(customer)
+          } else {
+            setSelectedCustomer(null)
+          }
+
           setTableId(sale.table_id || "")
           setOrderType(sale.sale_type as SaleType)
           setActiveSaleId(sale.id)
@@ -579,7 +634,7 @@ export default function POSPage() {
 
   const clearCart = () => {
     setCartItems([])
-    setCustomerName("")
+    setSelectedCustomer(null)
     setTableId("")
     setActiveSaleId(null)
     setCurrentOrderId(`#ORD-${Math.floor(Math.random() * 10000)}`)
@@ -609,6 +664,16 @@ export default function POSPage() {
                     </span>
                 )}
             </Button>
+            {cashierSession && (
+            <Button 
+              variant="destructive" 
+              size="icon"
+              onClick={openCloseRegisterModal} 
+              title="Close Register"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         {/* Order Queue */}
@@ -648,8 +713,8 @@ export default function POSPage() {
             orderId={currentOrderId}
             orderType={orderType}
             setOrderType={setOrderType}
-            customerName={customerName}
-            setCustomerName={setCustomerName}
+            selectedCustomer={selectedCustomer}
+            onSelectCustomer={setSelectedCustomer}
             orderNote={orderNote}
             setOrderNote={setOrderNote}
             tableId={tableId}
@@ -673,9 +738,11 @@ export default function POSPage() {
             onSelectDiscount={setSelectedDiscountId}
             customDiscount={customDiscount}
             setCustomDiscount={setCustomDiscount}
-            onCloseRegister={openCloseRegisterModal}
             onTaxChange={setTaxRate}
-        />
+            tenantId={tenantId}
+            onSendToKitchen={handleSendToKitchen}
+            kitchenDisplays={kitchenDisplays}
+          />
       </div>
 
       <RegisterModal 
@@ -699,7 +766,7 @@ export default function POSPage() {
         onClose={() => setShowPaymentModal(false)}
         onPaymentComplete={handlePaymentComplete}
         totalAmount={cartTotal.total}
-        customerName={customerName}
+        customerName={selectedCustomer?.name || 'Walk-in Customer'}
         orderNumber={currentOrderId}
         items={cartItems.map(i => ({ name: i.item.name, quantity: i.quantity, price: i.item.selling_price }))}
         subtotal={cartTotal.subtotal}

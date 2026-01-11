@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { MenuItem, Table, SaleType } from "@/types/database"
-import { Trash2, MoreHorizontal, Copy, TicketPercent } from "lucide-react"
+import { MenuItem, Table, SaleType, Customer } from "@/types/database"
+import { Trash2, MoreHorizontal, Copy, TicketPercent, ChefHat } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { CustomerDialog } from "./customer-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,8 +36,8 @@ interface OrderSidebarProps {
   orderId: string
   orderType: "dine_in" | "takeout" | "delivery"
   setOrderType: (type: "dine_in" | "takeout" | "delivery") => void
-  customerName: string
-  setCustomerName: (name: string) => void
+  selectedCustomer: Customer | null
+  onSelectCustomer: (customer: Customer | null) => void
   orderNote?: string
   setOrderNote?: (note: string) => void
   tableId: string
@@ -60,16 +61,18 @@ interface OrderSidebarProps {
   onSelectDiscount: (id: string | null) => void
   customDiscount?: { type: 'percentage' | 'fixed', value: number }
   setCustomDiscount?: (discount: { type: 'percentage' | 'fixed', value: number }) => void
-  onCloseRegister?: () => void
   onTaxChange?: (rate: number) => void
+  tenantId?: string | null
+  onSendToKitchen: (destination?: string) => void
+  kitchenDisplays?: { id: string, name: string }[]
 }
 
 export function OrderSidebar({
   orderId,
   orderType,
   setOrderType,
-  customerName,
-  setCustomerName,
+  selectedCustomer,
+  onSelectCustomer,
   tableId,
   setTableId,
   tables,
@@ -90,8 +93,10 @@ export function OrderSidebar({
   onSelectDiscount,
   customDiscount = { type: 'percentage', value: 0 },
   setCustomDiscount,
-  onCloseRegister,
-  onTaxChange
+  onTaxChange,
+  tenantId,
+  onSendToKitchen,
+  kitchenDisplays = []
 }: OrderSidebarProps) {
   const { toast } = useToast()
 
@@ -123,37 +128,30 @@ export function OrderSidebar({
               </Button>
             </div>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreHorizontal className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={copyOrderNumber}>
-                <Copy className="mr-2 h-4 w-4" />
-                Copy Order ID
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {onCloseRegister && (
-                <>
-                  <DropdownMenuItem onClick={onCloseRegister}>
-                    <TicketPercent className="mr-2 h-4 w-4" />
-                    Close Register
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem 
-                className="text-destructive focus:text-destructive"  
-                onClick={onClearCart}
-                disabled={cartItems.length === 0}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Clear Order
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={copyOrderNumber}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copy Order ID
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  className="text-destructive focus:text-destructive"  
+                  onClick={onClearCart}
+                  disabled={cartItems.length === 0}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear Order
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         <Tabs value={orderType} onValueChange={(v) => setOrderType(v as SaleType)} className="w-full">
@@ -169,12 +167,10 @@ export function OrderSidebar({
       <div className="p-4 border-b space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="customer-name">Customer Name</Label>
-            <Input
-              id="customer-name"
-              placeholder="Name"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
+            <CustomerDialog 
+                selectedCustomer={selectedCustomer} 
+                onSelect={onSelectCustomer} 
+                tenantId={tenantId}
             />
           </div>
           {orderType === "dine_in" && (
@@ -320,10 +316,31 @@ export function OrderSidebar({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+             <DropdownMenu>
+               <DropdownMenuTrigger asChild>
+                 <Button 
+                    variant="secondary" 
+                    disabled={cartItems.length === 0 || isProcessing}
+                    className="bg-blue-100 text-blue-700 hover:bg-blue-200"
+                 >
+                    <ChefHat className="mr-2 h-4 w-4" />
+                    Send to
+                 </Button>
+               </DropdownMenuTrigger>
+               <DropdownMenuContent align="start" className="w-48">
+                 {(kitchenDisplays.length > 0 ? kitchenDisplays : [{id: 'k', name: 'Kitchen'}, {id: 'b', name: 'Bar'}]).map(d => (
+                   <DropdownMenuItem key={d.name} onClick={() => onSendToKitchen(d.name)}>
+                     <ChefHat className="mr-2 h-4 w-4" />
+                     {d.name}
+                   </DropdownMenuItem>
+                 ))}
+               </DropdownMenuContent>
+             </DropdownMenu>
+
              <Button variant="outline" onClick={onHoldOrder} disabled={cartItems.length === 0 || isProcessing}>
                 Hold Order
              </Button>
-            <Button className="w-full bg-primary hover:bg-primary/90" onClick={onPay} disabled={cartItems.length === 0 || isProcessing}>
+            <Button className="w-full bg-primary hover:bg-primary/90 col-span-2" onClick={onPay} disabled={cartItems.length === 0 || isProcessing}>
                 Pay {formatCurrency(total, currency)}
             </Button>
         </div>

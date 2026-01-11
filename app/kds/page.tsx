@@ -3,8 +3,67 @@
 import { useCallback, useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { Clock, CheckCircle2, ChefHat, AlertCircle, XCircle } from 'lucide-react'
-import type { KDSOrder, KDSOrderStatus, KDSOrderItem } from '@/types/database'
+import { Clock, CheckCircle2, ChefHat, AlertCircle, XCircle, Timer } from 'lucide-react'
+import type { KDSOrder, KDSOrderStatus, KDSOrderItem, KDSOrderItemStatus } from '@/types/database'
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+function CurrentTime() {
+    const [time, setTime] = useState(new Date())
+
+    useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000)
+        return () => clearInterval(timer)
+    }, [])
+
+    return (
+        <div className="text-right">
+            <div className="text-2xl font-bold font-mono">
+                {time.toLocaleTimeString()}
+            </div>
+            <div className="text-sm text-muted-foreground">
+                {time.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            </div>
+        </div>
+    )
+}
+
+function OrderTimer({ start, end, label }: { start: string, end?: string | null, label?: string }) {
+    const [elapsed, setElapsed] = useState("")
+
+    useEffect(() => {
+        const calculate = () => {
+            const endDate = end ? new Date(end) : new Date()
+            const diff = Math.floor((endDate.getTime() - new Date(start).getTime()) / 1000)
+            const mins = Math.floor(diff / 60)
+            const secs = diff % 60
+            setElapsed(`${mins}m ${secs}s`)
+        }
+
+        calculate() // Initial calculation
+        
+        if (end) return
+
+        const interval = setInterval(calculate, 1000)
+        return () => clearInterval(interval)
+    }, [start, end])
+
+    return (
+        <div className="flex items-center gap-1 text-xs font-mono bg-muted/50 px-2 py-1 rounded">
+            <Timer className="w-3 h-3" />
+            {label && <span className="mr-1">{label}:</span>}
+            <span>{elapsed}</span>
+        </div>
+    )
+}
 
 type OrderWithItems = KDSOrder & {
   kds_order_items: (KDSOrderItem & {
@@ -19,10 +78,12 @@ function KDSContent() {
   const [orders, setOrders] = useState<OrderWithItems[]>([])
   const [loading, setLoading] = useState(true)
   const [tenantId, setTenantId] = useState<string | null>(null)
+  const [stationName, setStationName] = useState<string | null>(null)
+  const [availableStations, setAvailableStations] = useState<{name: string, id: string}[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const loadOrders = useCallback(async (tid: string) => {
-    const { data: ordersData } = await supabase
+  const loadOrders = useCallback(async (tid: string, station?: string | null) => {
+    let query = supabase
       .from('kds_orders')
       .select(`
         *,
@@ -36,6 +97,17 @@ function KDSContent() {
       .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: true })
 
+    if (station) {
+      // If station is "Kitchen", also include orders with null assigned_station (default)
+      if (station.toLowerCase() === 'kitchen') {
+        query = query.or(`assigned_station.eq.${station},assigned_station.is.null`)
+      } else {
+        query = query.eq('assigned_station', station)
+      }
+    }
+
+    const { data: ordersData } = await query
+
     setOrders(((ordersData ?? []) as unknown as OrderWithItems[]))
     setLoading(false)
   }, [])
@@ -43,12 +115,13 @@ function KDSContent() {
   const init = useCallback(async () => {
     try {
       let tid: string | null = null
+      let sName: string | null = null
 
       if (token) {
         // Authenticate with token
         const { data, error } = await supabase
           .from('kitchen_displays')
-          .select('tenant_id')
+          .select('tenant_id, name')
           .eq('token', token)
           .single()
 
@@ -58,6 +131,7 @@ function KDSContent() {
           return
         }
         tid = data.tenant_id
+        sName = data.name
       } else {
         // Fallback to user auth
         const { data: { user } } = await supabase.auth.getUser()
@@ -75,12 +149,22 @@ function KDSContent() {
 
         if (userData) {
           tid = userData.tenant_id
+          // Fetch available stations for Admin
+          const { data: stations } = await supabase
+            .from('kitchen_displays')
+            .select('id, name')
+            .eq('tenant_id', tid)
+          
+          if (stations) {
+             setAvailableStations(stations)
+          }
         }
       }
 
       if (tid) {
         setTenantId(tid)
-        await loadOrders(tid)
+        setStationName(sName)
+        await loadOrders(tid, sName)
       } else {
         setError('No tenant found')
         setLoading(false)
@@ -116,7 +200,7 @@ function KDSContent() {
           filter: `tenant_id=eq.${tenantId}`
         },
         () => {
-          void loadOrders(tenantId)
+          void loadOrders(tenantId, stationName)
         }
       )
       .on(
@@ -128,7 +212,7 @@ function KDSContent() {
         },
         () => {
           // Ideally check tenant_id here too via relation, but straightforward reload is safe
-          void loadOrders(tenantId)
+          void loadOrders(tenantId, stationName)
         }
       )
       .subscribe()
@@ -136,7 +220,7 @@ function KDSContent() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [loadOrders, tenantId])
+  }, [loadOrders, tenantId, stationName])
 
   useEffect(() => {
     const unsubscribe = subscribeToOrders()
@@ -146,6 +230,21 @@ function KDSContent() {
   }, [subscribeToOrders])
 
   const updateOrderStatus = async (orderId: string, status: KDSOrderStatus) => {
+    // Optimistic Update
+    setOrders(currentOrders => 
+      currentOrders.map(order => {
+        if (order.id === orderId) {
+            return {
+                ...order,
+                status,
+                started_at: status === 'preparing' ? new Date().toISOString() : order.started_at,
+                completed_at: (status === 'ready' || status === 'served') ? new Date().toISOString() : order.completed_at
+            }
+        }
+        return order
+      })
+    )
+
     const updateData: Partial<Pick<KDSOrder, 'status' | 'started_at' | 'completed_at'>> = { status }
     if (status === 'preparing') {
       updateData.started_at = new Date().toISOString()
@@ -153,25 +252,46 @@ function KDSContent() {
       updateData.completed_at = new Date().toISOString()
     }
 
-    await supabase.from('kds_orders').update(updateData).eq('id', orderId)
+    const { error } = await supabase.from('kds_orders').update(updateData).eq('id', orderId)
+    
+    if (error) {
+        console.error("Failed to update order status", error)
+        // Revert or reload if failed
+        if (tenantId) loadOrders(tenantId)
+    }
   }
 
   const updateItemStatus = async (itemId: string, status: string) => {
-    await supabase.from('kds_order_items').update({ status }).eq('id', itemId)
+    // Optimistic Update
+    setOrders(currentOrders => 
+        currentOrders.map(order => ({
+            ...order,
+            kds_order_items: order.kds_order_items.map(item => 
+                item.id === itemId ? { ...item, status: status as KDSOrderItemStatus } : item
+            )
+        }))
+    )
+
+    const { error } = await supabase.from('kds_order_items').update({ status }).eq('id', itemId)
+    
+    if (error) {
+        console.error("Failed to update item status", error)
+        if (tenantId) loadOrders(tenantId, stationName)
+    }
   }
 
   const getStatusColor = (status: KDSOrderStatus) => {
     switch (status) {
       case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+        return 'border-yellow-500 bg-yellow-50'
       case 'preparing':
-        return 'bg-blue-100 text-blue-800 border-blue-300'
+        return 'border-blue-500 bg-blue-50'
       case 'ready':
-        return 'bg-green-100 text-green-800 border-green-300'
+        return 'border-green-500 bg-green-50'
       case 'cancelled':
-        return 'bg-red-100 text-red-800 border-red-300'
+        return 'border-red-500 bg-red-50'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'border-gray-200'
     }
   }
 
@@ -190,14 +310,14 @@ function KDSContent() {
     }
   }
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityBadgeVariant = (priority: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (priority) {
       case 'urgent':
-        return 'bg-red-500'
+        return 'destructive'
       case 'high':
-        return 'bg-orange-500'
+        return 'destructive' // or a custom variant if available, fallback to destructive for visibility
       default:
-        return 'bg-gray-400'
+        return 'secondary'
     }
   }
 
@@ -209,32 +329,56 @@ function KDSContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-6">
-         <div className="bg-white rounded-lg shadow p-8 text-center max-w-md w-full">
-          <AlertCircle className="w-16 h-16 mx-auto text-red-500 mb-4" />
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600">{error}</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+         <Card className="max-w-md w-full">
+            <CardContent className="pt-6 flex flex-col items-center text-center">
+                <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+                <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
+                <p className="text-gray-600">{error}</p>
+            </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Kitchen Display System</h1>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold text-gray-900">{stationName && stationName !== 'All' ? `${stationName} Display` : 'Kitchen Display System'}</h1>
+            <CurrentTime />
+            {!token && availableStations.length > 0 && (
+                <Select 
+                    value={stationName || 'All'} 
+                    onValueChange={(val) => {
+                        setStationName(val)
+                        if (tenantId) loadOrders(tenantId, val)
+                    }}
+                >
+                    <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Select Station" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="All">All Stations</SelectItem>
+                        {availableStations.map(s => (
+                            <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            )}
+        </div>
+        <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-yellow-400"></span>
-            <span className="text-sm">Pending: {groupedOrders.pending.length}</span>
+            <span className="text-sm font-medium">Pending: {groupedOrders.pending.length}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-blue-400"></span>
-            <span className="text-sm">Preparing: {groupedOrders.preparing.length}</span>
+            <span className="text-sm font-medium">Preparing: {groupedOrders.preparing.length}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-green-400"></span>
-            <span className="text-sm">Ready: {groupedOrders.ready.length}</span>
+            <span className="text-sm font-medium">Ready: {groupedOrders.ready.length}</span>
           </div>
         </div>
       </div>
@@ -244,118 +388,128 @@ function KDSContent() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
         </div>
       ) : orders.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <AlertCircle className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-          <p className="text-xl text-gray-600">No active orders</p>
-        </div>
+        <Card className="max-w-lg mx-auto mt-12">
+            <CardContent className="pt-6 flex flex-col items-center text-center">
+                <AlertCircle className="w-16 h-16 text-gray-300 mb-4" />
+                <p className="text-xl text-gray-500">No active orders</p>
+            </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {(['pending', 'preparing', 'ready'] as const).map((status) => (
             <div key={status} className="space-y-4">
-              <h2 className="text-xl font-bold capitalize mb-4 flex items-center gap-2">
+              <h2 className="text-xl font-bold capitalize mb-4 flex items-center gap-2 text-gray-800">
                 {getStatusIcon(status as KDSOrderStatus)}
                 {status}
-                <span className="text-sm font-normal text-gray-500">
-                  ({groupedOrders[status].length})
-                </span>
+                <Badge variant="outline" className="ml-2">
+                  {groupedOrders[status].length}
+                </Badge>
               </h2>
 
               {groupedOrders[status].map((order) => (
-                <div
-                  key={order.id}
-                  className={`bg-white rounded-lg shadow border-l-4 ${getStatusColor(order.status)} overflow-hidden`}
+                <Card 
+                  key={order.id} 
+                  className={`border-l-4 overflow-hidden ${getStatusColor(order.status)}`}
                 >
-                  <div className="p-4 border-b bg-gray-50">
-                    <div className="flex items-center justify-between mb-2">
+                  <CardHeader className="p-4 pb-2 bg-white/50">
+                    <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-lg">#{order.order_number}</span>
+                        <span className="font-bold text-lg">{order.order_number}</span>
+                        {order.status === 'ready' || order.status === 'served' ? (
+                            <OrderTimer start={order.started_at || order.created_at} end={order.completed_at} label="Prep" />
+                        ) : order.status === 'preparing' ? (
+                            <OrderTimer start={order.started_at || order.created_at} label="Running" />
+                        ) : (
+                            <OrderTimer start={order.created_at} label="Wait" />
+                        )}
                         {order.priority !== 'normal' && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs text-white ${getPriorityColor(order.priority)}`}
-                          >
+                          <Badge variant={getPriorityBadgeVariant(order.priority)}>
                             {order.priority}
-                          </span>
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
                         {order.assigned_station && (
-                          <span className="text-xs text-gray-600">
+                          <span className="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded">
                             {order.assigned_station}
                           </span>
                         )}
-                        {getStatusIcon(order.status)}
                       </div>
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 font-medium">
                       {new Date(order.created_at).toLocaleTimeString()}
                     </div>
-                  </div>
-
-                  <div className="p-4 space-y-3">
+                  </CardHeader>
+                  
+                  <CardContent className="p-4 bg-white/30 space-y-3">
                     {order.kds_order_items?.map((item) => (
                       <div key={item.id} className="flex items-start gap-3">
-                        <span className="font-bold">{item.quantity}x</span>
+                        <Badge variant="outline" className="font-bold h-6 min-w-8 flex items-center justify-center bg-white">
+                            {item.quantity}x
+                        </Badge>
                         <div className="flex-1">
-                          <p className="font-medium">{item.menu_items?.name}</p>
+                          <p className="font-medium text-gray-900">{item.menu_items?.name}</p>
                           {item.notes && (
-                            <p className="text-sm text-gray-600">{item.notes}</p>
+                            <p className="text-sm text-gray-600 mt-0.5 italic">Note: {item.notes}</p>
                           )}
                         </div>
                         {status === 'preparing' && item.status !== 'ready' && (
-                          <button
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => updateItemStatus(item.id, 'ready')}
-                            className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded hover:bg-green-200"
+                            className="h-7 text-xs bg-green-100 text-green-700 hover:bg-green-200 hover:text-green-800"
                           >
                             Ready
-                          </button>
+                          </Button>
                         )}
                       </div>
                     ))}
-                  </div>
+                  </CardContent>
 
-                  <div className="p-4 bg-gray-50 border-t flex gap-2">
+                  <CardFooter className="p-4 pt-3 bg-white/50 border-t border-gray-100 flex gap-2">
                     {status === 'pending' && (
                       <>
-                        <button
+                        <Button
                           onClick={() => updateOrderStatus(order.id, 'preparing')}
-                          className="flex-1 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           Start Cooking
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="destructive"
                           onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </>
                     )}
                     {status === 'preparing' && (
                       <>
-                        <button
+                        <Button
                           onClick={() => updateOrderStatus(order.id, 'ready')}
-                          className="flex-1 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                         >
                           Mark Ready
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="destructive"
                           onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </>
                     )}
                     {status === 'ready' && (
-                      <button
+                      <Button
                         onClick={() => updateOrderStatus(order.id, 'served')}
-                        className="flex-1 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
                       >
                         Mark Served
-                      </button>
+                      </Button>
                     )}
-                  </div>
-                </div>
+                  </CardFooter>
+                </Card>
               ))}
             </div>
           ))}
@@ -368,7 +522,7 @@ function KDSContent() {
 export default function KDSPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
       </div>
     }>

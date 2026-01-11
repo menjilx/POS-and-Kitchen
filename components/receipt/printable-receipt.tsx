@@ -40,10 +40,15 @@ interface PrintableReceiptProps {
 export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceiptProps>(
   ({ settings, data }, ref) => {
     const formatPrice = (price: number) => {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: data.currency || 'USD',
-      }).format(price)
+      try {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: data.currency || 'USD',
+        }).format(price)
+      } catch (e) {
+        // Fallback for invalid currency codes (e.g. symbols like $)
+        return `${data.currency || '$'}${price.toFixed(2)}`
+      }
     }
 
     return (

@@ -29,7 +29,9 @@ export type PurchaseItem = Tables['purchase_items']['Row']
 export type Table = Tables['tables']['Row']
 export type Reservation = Tables['reservations']['Row']
 
-export type Sale = Tables['sales']['Row']
+export type Sale = Tables['sales']['Row'] & {
+  customer_id?: string | null
+}
 export type SaleItem = Tables['sale_items']['Row']
 
 export type KDSOrder = Tables['kds_orders']['Row']
@@ -39,6 +41,19 @@ export type ExpenseCategory = Tables['expense_categories']['Row']
 export type Expense = Tables['expenses']['Row']
 
 export type CashierSession = Tables['cashier_sessions']['Row']
+
+export type Customer = {
+  id: string
+  tenant_id: string
+  name: string
+  email: string | null
+  phone: string | null
+  address: string | null
+  notes: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
 
 export type UserRole = 'owner' | 'manager' | 'staff' | 'superadmin'
 export type UserStatus = 'active' | 'deactivated'
@@ -56,3 +71,9 @@ export type KDSOrderPriority = 'normal' | 'high' | 'urgent'
 export type KDSOrderItemStatus = 'pending' | 'preparing' | 'ready'
 
 export type StockAdjustmentType = 'purchase' | 'sale' | 'waste' | 'stocktake' | 'adjustment'
+
+export type PaymentAdditionalData = {
+  ref?: string
+  notes?: string
+  attachment?: string | null
+}

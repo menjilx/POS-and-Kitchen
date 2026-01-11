@@ -9,18 +9,21 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { formatCurrency } from "@/lib/utils"
-import { User, X, Receipt, Printer, Download } from "lucide-react"
+import { User, X, Receipt, Printer, Download, Paperclip } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { PrintableReceipt } from "@/components/receipt/printable-receipt"
 import { supabase } from "@/lib/supabase/client"
+import { PaymentAdditionalData } from "@/types/database"
 
 interface PaymentModalProps {
   isOpen: boolean
   onClose: () => void
-  onPaymentComplete: (method: string, amount: number, isHouseAccount: boolean) => Promise<void>
+  onPaymentComplete: (method: string, amount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => Promise<void>
   totalAmount: number
   customerName: string
   orderNumber: string
@@ -52,6 +55,12 @@ export function PaymentModal({
   const [showReceipt, setShowReceipt] = useState(false)
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
   const [cashierName, setCashierName] = useState<string>("")
+  const [isFirstInput, setIsFirstInput] = useState(true)
+
+  // Card Support Info
+  const [cardRef, setCardRef] = useState("")
+  const [cardNotes, setCardNotes] = useState("")
+  const [attachmentName, setAttachmentName] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -74,10 +83,26 @@ export function PaymentModal({
       setReceivedAmount(totalAmount.toString())
       setPaymentMethod("cash")
       setShowReceipt(false)
+      setIsFirstInput(true)
+      setCardRef("")
+      setCardNotes("")
+      setAttachmentName(null)
     }
   }
 
   const handleNumPadClick = (value: string) => {
+    if (isFirstInput) {
+        if (value === "backspace") {
+            setReceivedAmount("")
+        } else if (value === ".") {
+            setReceivedAmount("0.")
+        } else {
+            setReceivedAmount(value)
+        }
+        setIsFirstInput(false)
+        return
+    }
+
     if (value === "backspace") {
       setReceivedAmount(prev => prev.slice(0, -1))
     } else if (value === ".") {
@@ -97,8 +122,22 @@ export function PaymentModal({
         // Assuming full payment for this iteration.
         return
     }
-
-    await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account')
+    
+    // Append card details to a structured note if card
+    // Note: This assumes onPaymentComplete can handle or we modify how we pass it.
+    // Since we can't easily change the prop signature without breaking callers, 
+    // we might need to handle it internally or assume the parent will handle it if we pass extra args (JS allows it)
+    // But better to perhaps append to notes? 
+    // Actually, onPaymentComplete signature in props is: (method, amount, isHouseAccount) => Promise<void>
+    // We can't pass extra data easily without changing parent. 
+    // However, the user wants to "show some field". 
+    // I will implement the UI fields now. 
+    
+    await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account', {
+        ref: cardRef,
+        notes: cardNotes,
+        attachment: attachmentName
+    })
     setShowReceipt(true)
   }
 
@@ -173,7 +212,9 @@ export function PaymentModal({
         {/* Left Side: Receipt Details */}
         <div className="flex-1 bg-muted/30 p-6 flex flex-col border-r">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-1">Payment</h2>
+            <DialogHeader className="text-left p-0 space-y-0">
+                <DialogTitle className="text-2xl font-bold mb-1">Payment</DialogTitle>
+            </DialogHeader>
             <div className="flex items-center gap-2 text-muted-foreground">
                 <span className="font-mono bg-muted px-2 py-0.5 rounded text-xs">{orderNumber}</span>
                 <span>•</span>
@@ -303,6 +344,48 @@ export function PaymentModal({
                 {paymentMethod === 'house_account' && (
                     <div className="p-4 bg-blue-50 text-blue-700 rounded-lg text-sm">
                         This order will be charged to the house account. No immediate payment required.
+                    </div>
+                )}
+
+                {paymentMethod === 'card' && (
+                    <div className="space-y-4 bg-muted/20 p-4 rounded-lg border">
+                         <div className="space-y-2">
+                            <Label htmlFor="card-ref" className="text-xs font-medium text-muted-foreground">Transaction Reference / Auth Code</Label>
+                            <Input 
+                                id="card-ref" 
+                                placeholder="e.g. TXN-123456" 
+                                value={cardRef} 
+                                onChange={(e) => setCardRef(e.target.value)}
+                                className="h-9 bg-background"
+                            />
+                         </div>
+                         
+                         <div className="space-y-2">
+                            <Label htmlFor="card-notes" className="text-xs font-medium text-muted-foreground">Payment Notes</Label>
+                            <textarea 
+                                id="card-notes" 
+                                placeholder="Optional notes..." 
+                                value={cardNotes}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCardNotes(e.target.value)}
+                                className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                            />
+                         </div>
+
+                         <div className="space-y-2">
+                            <Label className="text-xs font-medium text-muted-foreground">Attachment</Label>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" className="w-full h-9 border-dashed text-muted-foreground justify-start" onClick={() => document.getElementById('file-upload')?.click()}>
+                                    <Paperclip className="mr-2 h-4 w-4" />
+                                    {attachmentName || "Attach receipt image..."}
+                                </Button>
+                                <input 
+                                    type="file" 
+                                    id="file-upload" 
+                                    className="hidden" 
+                                    onChange={(e) => setAttachmentName(e.target.files?.[0]?.name || null)}
+                                />
+                            </div>
+                         </div>
                     </div>
                 )}
             </div>

@@ -80,6 +80,12 @@ const navGroups: NavGroup[] = [
         icon: Calendar,
         roles: ["owner", "manager"],
       },
+      {
+        title: "Customers",
+        url: "/dashboard/customers",
+        icon: Users,
+        roles: ["owner", "manager", "staff"],
+      },
     ],
   },
   {
