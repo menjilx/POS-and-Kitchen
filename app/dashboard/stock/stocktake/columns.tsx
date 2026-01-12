@@ -24,7 +24,7 @@ export const getColumns = (
   },
   {
     accessorKey: "expected_quantity",
-    header: ({ column }) => <div className="text-right">Expected</div>,
+    header: () => <div className="text-right">Expected</div>,
     cell: ({ row }) => (
       <div className="text-right">
         {row.original.expected_quantity.toFixed(2)} {row.original.unit}
@@ -33,7 +33,7 @@ export const getColumns = (
   },
   {
     accessorKey: "actual_quantity",
-    header: ({ column }) => <div className="text-right">Actual</div>,
+    header: () => <div className="text-right">Actual</div>,
     cell: ({ row }) => (
       <div className="flex justify-end">
         <input
@@ -48,7 +48,7 @@ export const getColumns = (
   },
   {
     accessorKey: "variance",
-    header: ({ column }) => <div className="text-right">Variance</div>,
+    header: () => <div className="text-right">Variance</div>,
     cell: ({ row }) => {
       const { variance, unit } = row.original
       return (
@@ -65,7 +65,7 @@ export const getColumns = (
   },
   {
     accessorKey: "variance_percentage",
-    header: ({ column }) => <div className="text-right">Variance %</div>,
+    header: () => <div className="text-right">Variance %</div>,
     cell: ({ row }) => {
       const { variance_percentage } = row.original
       const isHighVariance = Math.abs(variance_percentage) > 5

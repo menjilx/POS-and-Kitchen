@@ -913,7 +913,7 @@ export default function SettingsPage() {
                         total: 28.07,
                         cashierName: 'Sarah M.',
                         customerName: 'John Doe',
-                        orderNumber: 'ORD-0042',
+                        orderNumber: '#ORD-000000042',
                         date: new Date().toLocaleString(),
                         paymentMethod: 'cash',
                         receivedAmount: 30,

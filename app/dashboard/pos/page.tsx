@@ -46,6 +46,14 @@ export default function POSPage() {
   const { toast } = useToast()
   const { currencySymbol, formatCurrency } = useTenantSettings()
 
+  const createFallbackOrderNumber = () => `#ORD-${Math.floor(Math.random() * 10000)}`
+
+  const fetchNextOrderNumber = async (tid: string) => {
+    const { data, error } = await supabase.rpc('get_next_order_number', { p_tenant_id: tid })
+    if (error || !data) throw error ?? new Error('Failed to generate order number')
+    return data as string
+  }
+
   // Data State
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [tables, setTables] = useState<Table[]>([])
@@ -81,9 +89,25 @@ export default function POSPage() {
   const [kitchenDisplays, setKitchenDisplays] = useState<{ id: string, name: string }[]>([])
 
   useEffect(() => {
-    setCurrentOrderId(`#ORD-${Math.floor(Math.random() * 10000)}`)
     void loadData()
   }, [])
+
+  useEffect(() => {
+    const ensureOrderNumber = async () => {
+      if (!tenantId) return
+      if (activeSaleId) return
+      if (currentOrderId) return
+
+      try {
+        const next = await fetchNextOrderNumber(tenantId)
+        setCurrentOrderId(next)
+      } catch {
+        setCurrentOrderId(createFallbackOrderNumber())
+      }
+    }
+
+    void ensureOrderNumber()
+  }, [tenantId, activeSaleId, currentOrderId])
 
   const loadData = async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -423,7 +447,7 @@ export default function POSPage() {
        
        toast({
         title: "Sent to Kitchen",
-        description: `Order ${currentOrderId} sent to ${destination || 'Kitchen'}.`,
+        description: `Order sent to ${destination || 'Kitchen'}.`,
        })
        
        clearCart()
@@ -452,7 +476,7 @@ export default function POSPage() {
        
        toast({
         title: "Order Held",
-        description: `Order ${currentOrderId} has been held.`,
+        description: `Order has been held.`,
        })
        
        clearCart()
@@ -468,6 +492,16 @@ export default function POSPage() {
   const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!tenantId || !user) throw new Error("No user or tenant")
+
+      let orderNumber = currentOrderId
+      if (!orderNumber) {
+        try {
+          orderNumber = await fetchNextOrderNumber(tenantId)
+        } catch {
+          orderNumber = createFallbackOrderNumber()
+        }
+        setCurrentOrderId(orderNumber)
+      }
 
       let saleId = activeSaleId
       
@@ -514,7 +548,7 @@ export default function POSPage() {
             .from("sales")
             .insert({
               tenant_id: tenantId,
-              order_number: currentOrderId,
+              order_number: orderNumber,
               sale_type: orderType,
               table_id: tableId || null,
               total_amount: cartTotal.total,
@@ -607,8 +641,8 @@ export default function POSPage() {
           toast({
               title: "Payment Successful",
               description: isHouseAccount
-                ? `Order ${currentOrderId} has been charged to house account.`
-                : `Order ${currentOrderId} has been paid via ${method.replace('_', ' ')}.`,
+                ? `Order has been charged to house account.`
+                : `Order has been paid via ${method.replace('_', ' ')}.`,
           })
           
           clearCart()
@@ -679,7 +713,7 @@ export default function POSPage() {
     setSelectedCustomer(null)
     setTableId("")
     setActiveSaleId(null)
-    setCurrentOrderId(`#ORD-${Math.floor(Math.random() * 10000)}`)
+    setCurrentOrderId("")
   }
 
   return (

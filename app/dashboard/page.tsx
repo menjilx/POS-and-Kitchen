@@ -6,14 +6,10 @@ import { TrendingUpIcon, TrendingDownIcon } from 'lucide-react'
 import { DailySalesChart } from '@/components/dashboard/daily-sales-chart'
 import { formatCurrency } from '@/lib/utils'
 import { format } from 'date-fns'
+import { DisplayStatusCard, type DisplayStatusRow } from '@/components/dashboard/display-status-card'
 
 type TodaySaleRow = {
   total_amount: number | string
-}
-
-type TopMenuItemRow = {
-  quantity: number | string
-  menu_items: { name: string } | null
 }
 
 type RecentSaleRow = {
@@ -27,6 +23,41 @@ type RecentSaleRow = {
 type DailySaleRow = {
   sale_date: string
   total_amount: number | string
+}
+
+type ProfitLossRow = {
+  period_start: string
+  period_end: string
+  revenue: number | string
+  cost_of_goods_sold: number | string
+  operating_expenses: number | string
+  gross_profit: number | string
+  net_profit: number | string
+}
+
+type MenuPerformanceRow = {
+  menu_item_id: string
+  menu_item_name: string
+  quantity_sold: number | string
+  total_revenue: number | string
+  total_cost: number | string
+  total_margin: number | string
+  margin_percentage: number | string
+}
+
+type DisplayRow = {
+  id: string
+  name: string
+  token: string | null
+}
+
+type KdsOrderRow = {
+  status: 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled'
+  priority: 'normal' | 'high' | 'urgent'
+  assigned_station: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
 }
 
 export default async function DashboardPage() {
@@ -66,15 +97,18 @@ export default async function DashboardPage() {
   const sevenDaysAgoIso = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
   const thirtyDaysAgoDate = new Date(new Date().getTime() - 30 * 24 * 60 * 60 * 1000)
   const yesterdayDate = new Date(new Date().getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  const monthStartIsoDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
 
   const [
     { data: todaySales },
     { data: yesterdaySales },
-    { data: netProfit },
+    { data: profitLossRows },
     { data: totalOrders },
     { data: topMenuItems },
     { data: recentSales },
     { data: dailySales },
+    { data: displays },
+    { data: openKdsOrders },
   ] = await Promise.all([
     supabase
       .from('sales')
@@ -87,18 +121,18 @@ export default async function DashboardPage() {
       .eq('tenant_id', tenantId)
       .eq('sale_date', yesterdayDate),
     supabase
-      .rpc('get_net_profit_ytd', { p_tenant_id: tenantId }),
+      .rpc('get_profit_loss', {
+        p_tenant_id: tenantId,
+        p_start_date: monthStartIsoDate,
+        p_end_date: todayIsoDate,
+      }),
     supabase
       .from('sales')
       .select('id')
       .eq('tenant_id', tenantId)
       .gte('sale_date', todayIsoDate),
     supabase
-      .from('sale_items')
-      .select('quantity, menu_items (name)')
-      .gte('created_at', sevenDaysAgoIso)
-      .order('quantity', { ascending: false })
-      .limit(5),
+      .rpc('get_menu_performance', { p_tenant_id: tenantId, p_days: 7 }),
     supabase
       .from('sales')
       .select('id, order_number, total_amount, sale_time, sale_type')
@@ -111,6 +145,17 @@ export default async function DashboardPage() {
       .select('sale_date, total_amount')
       .eq('tenant_id', tenantId)
       .gte('sale_date', thirtyDaysAgoDate.toISOString().split('T')[0]),
+    supabase
+      .from('kitchen_displays')
+      .select('id, name, token')
+      .eq('tenant_id', tenantId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('kds_orders')
+      .select('status, priority, assigned_station, created_at, started_at, completed_at')
+      .eq('tenant_id', tenantId)
+      .not('status', 'eq', 'served')
+      .not('status', 'eq', 'cancelled'),
   ])
 
   const todaySalesRows = (todaySales ?? []) as unknown as TodaySaleRow[]
@@ -118,9 +163,63 @@ export default async function DashboardPage() {
   const todaySalesTotal = todaySalesRows.reduce((sum, sale) => sum + Number(sale.total_amount), 0) || 0
   const yesterdaySalesTotal = yesterdaySalesRows.reduce((sum, sale) => sum + Number(sale.total_amount), 0) || 0
   const totalOrderCount = totalOrders?.length || 0
-
-  const topMenuRows = (topMenuItems ?? []) as unknown as TopMenuItemRow[]
   const recentSalesRows = (recentSales ?? []) as unknown as RecentSaleRow[]
+
+  const profitLoss = (profitLossRows ?? []) as unknown as ProfitLossRow[]
+  const netProfitMtd = profitLoss[0]?.net_profit ?? 0
+
+  const menuPerformanceRows = (topMenuItems ?? []) as unknown as MenuPerformanceRow[]
+  const topMenu = menuPerformanceRows
+    .filter((row) => Number(row.quantity_sold) > 0)
+    .slice(0, 5)
+
+  const displayRows = (displays ?? []) as unknown as DisplayRow[]
+  const openOrders = (openKdsOrders ?? []) as unknown as KdsOrderRow[]
+
+  const displayStatusRows: DisplayStatusRow[] = displayRows.map((display) => {
+    const displayName = display.name.trim()
+    const displayNameLower = displayName.toLowerCase()
+    const isKitchenLike = displayNameLower.includes('kitchen')
+
+    const stationOrders = openOrders.filter((order) => {
+      const stationNameLower = (order.assigned_station ?? '').trim().toLowerCase()
+      if (isKitchenLike) return order.assigned_station === null || stationNameLower.includes('kitchen')
+      return order.assigned_station?.trim() === displayName
+    })
+
+    const pendingOrders = stationOrders.filter((o) => o.status === 'pending').length
+    const preparingOrders = stationOrders.filter((o) => o.status === 'preparing').length
+    const readyOrders = stationOrders.filter((o) => o.status === 'ready').length
+    const urgentOrders = stationOrders.filter((o) => o.priority === 'urgent').length
+
+    const oldestCreatedAt = stationOrders
+      .map((o) => o.created_at)
+      .sort((a, b) => a.localeCompare(b))[0]
+    const oldestOrderMinutes = oldestCreatedAt
+      ? Math.max(0, Math.floor((now.getTime() - new Date(oldestCreatedAt).getTime()) / 60000))
+      : null
+
+    const lastActivityIso = stationOrders
+      .flatMap((o) => [o.created_at, o.started_at, o.completed_at].filter(Boolean) as string[])
+      .sort((a, b) => b.localeCompare(a))[0] ?? null
+
+    return {
+      stationName: display.name,
+      openHref: display.token ? `/kds?token=${display.token}` : null,
+      isActive: stationOrders.length > 0,
+      openOrders: stationOrders.length,
+      pendingOrders,
+      preparingOrders,
+      readyOrders,
+      urgentOrders,
+      oldestOrderMinutes,
+      lastActivityIso,
+    }
+  })
+
+  const totalOpenOrders = displayStatusRows.reduce((sum, r) => sum + r.openOrders, 0)
+  const totalUrgentOrders = displayStatusRows.reduce((sum, r) => sum + r.urgentOrders, 0)
+  const totalReadyOrders = displayStatusRows.reduce((sum, r) => sum + r.readyOrders, 0)
 
   const dailyRows = (dailySales ?? []) as unknown as DailySaleRow[]
   const totalsByDate = dailyRows.reduce((acc, row) => {
@@ -198,17 +297,17 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardDescription>Net Profit (YTD)</CardDescription>
+            <CardDescription>Net Profit (MTD)</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums">
-              {formatCurrency(Number(netProfit || 0), currency)}
+              {formatCurrency(Number(netProfitMtd || 0), currency)}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-col items-start gap-1 text-sm">
             <div className="flex gap-2 font-medium">
-              Year to date profit
+              Month to date profit
             </div>
             <div className="text-muted-foreground">
-              Total profit this year
+              Total profit this month
             </div>
           </CardContent>
         </Card>
@@ -241,6 +340,13 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
+      <DisplayStatusCard
+        rows={displayStatusRows}
+        totalOpenOrders={totalOpenOrders}
+        totalUrgentOrders={totalUrgentOrders}
+        totalReadyOrders={totalReadyOrders}
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card>
           <CardHeader>
@@ -248,16 +354,28 @@ export default async function DashboardPage() {
             <CardDescription>Most sold items this week</CardDescription>
           </CardHeader>
           <CardContent>
-            {topMenuRows.length > 0 ? (
+            {topMenu.length > 0 ? (
               <ul className="space-y-3">
-                {topMenuRows.map((item, index) => (
-                  <li key={index} className="flex justify-between items-center text-sm py-2 border-b last:border-0">
-                    <span className="font-medium">{item.menu_items?.name}</span>
-                    <Badge variant="outline" className="px-1.5 text-muted-foreground">
-                      {item.quantity} sold
-                    </Badge>
-                  </li>
-                ))}
+                {topMenu.map((item) => {
+                  const quantitySold = Number(item.quantity_sold) || 0
+                  const totalRevenue = Number(item.total_revenue) || 0
+                  const marginPct = Number(item.margin_percentage)
+                  const marginPctDisplay = Number.isFinite(marginPct) ? marginPct : 0
+
+                  return (
+                    <li key={item.menu_item_id} className="flex justify-between items-center text-sm py-2 border-b last:border-0 gap-4">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{item.menu_item_name}</div>
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          {formatCurrency(totalRevenue, currency)} revenue · {marginPctDisplay.toFixed(1)}% margin
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="px-1.5 text-muted-foreground tabular-nums shrink-0">
+                        {quantitySold} sold
+                      </Badge>
+                    </li>
+                  )
+                })}
               </ul>
             ) : (
               <p className="text-muted-foreground">No sales data available</p>

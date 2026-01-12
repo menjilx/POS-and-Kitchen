@@ -53,7 +53,7 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
             style: 'currency',
             currency: data.currency || 'USD',
         }).format(price)
-      } catch (e) {
+      } catch {
         // Fallback for invalid currency codes (e.g. symbols like $)
         return `${data.currency || '$'}${price.toFixed(2)}`
       }

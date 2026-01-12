@@ -1,25 +1,35 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
+function createClient(request: NextRequest) {
+  let cookiesToSet: Parameters<NextResponse['cookies']['set']>[] = []
+
+  const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(newCookies) {
+          cookiesToSet = newCookies.map(({ name, value, options }) => [name, value, options])
         },
       },
     }
   )
+
+  const applyCookies = (response: NextResponse) => {
+    cookiesToSet.forEach((args) => response.cookies.set(...args))
+    return response
+  }
+
+  return { client, applyCookies }
 }
 
 export async function proxy(request: NextRequest) {
-  const supabase = await createClient()
+  const { client: supabase, applyCookies } = createClient(request)
   const path = request.nextUrl.pathname
 
   if (path === "/@vite/client" || path.startsWith("/@vite/")) {
@@ -38,45 +48,45 @@ export async function proxy(request: NextRequest) {
     if (session) {
       const { data: isSuperAdmin } = await supabase.rpc('is_superadmin')
       if (isSuperAdmin === true) {
-        return NextResponse.redirect(new URL('/admin', request.url))
+        return applyCookies(NextResponse.redirect(new URL('/admin', request.url)))
       }
     }
-    return NextResponse.next()
+    return applyCookies(NextResponse.next())
   }
 
   if (path.startsWith('/admin') && path !== '/admin/login') {
     if (!session) {
       const loginUrl = new URL('/admin/login', request.url)
       loginUrl.searchParams.set('redirectTo', path)
-      return NextResponse.redirect(loginUrl)
+      return applyCookies(NextResponse.redirect(loginUrl))
     }
 
     const { data: isSuperAdmin } = await supabase.rpc('is_superadmin')
 
     if (isSuperAdmin !== true) {
       const loginUrl = new URL('/admin/login', request.url)
-      return NextResponse.redirect(loginUrl)
+      return applyCookies(NextResponse.redirect(loginUrl))
     }
 
-    return NextResponse.next()
+    return applyCookies(NextResponse.next())
   }
 
   if (path === '/login' || path === '/signup' || path === '/auth/callback') {
     if (session && (path === '/login' || path === '/signup')) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return applyCookies(NextResponse.redirect(new URL('/dashboard', request.url)))
     }
-    return NextResponse.next()
+    return applyCookies(NextResponse.next())
   }
 
   if (path.startsWith('/dashboard') || path.startsWith('/kds')) {
     if (!session) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', path)
-      return NextResponse.redirect(loginUrl)
+      return applyCookies(NextResponse.redirect(loginUrl))
     }
   }
 
-  return NextResponse.next()
+  return applyCookies(NextResponse.next())
 }
 
 export const matcher = [

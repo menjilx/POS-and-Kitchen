@@ -98,9 +98,9 @@ function KDSContent() {
       .order('created_at', { ascending: true })
 
     if (station) {
-      // If station is "Kitchen", also include orders with null assigned_station (default)
-      if (station.toLowerCase() === 'kitchen') {
-        query = query.or(`assigned_station.eq.${station},assigned_station.is.null`)
+      const stationLower = station.trim().toLowerCase()
+      if (stationLower.includes('kitchen')) {
+        query = query.or('assigned_station.is.null,assigned_station.ilike.*kitchen*')
       } else {
         query = query.eq('assigned_station', station)
       }
