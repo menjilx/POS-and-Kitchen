@@ -13,7 +13,9 @@ import {
   Loader2,
   TicketPercent,
   Receipt as ReceiptIcon,
-  Upload
+  Upload,
+  Copy,
+  ExternalLink
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useToast } from '@/hooks/use-toast'
@@ -639,8 +641,30 @@ export default function SettingsPage() {
                     <div className="grid md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-md">
                       <div>
                         <p className="text-sm font-medium mb-2">Connection Link</p>
-                        <div className="p-2 bg-white border rounded text-xs font-mono break-all">
-                          {`${window.location.origin}/kds?token=${display.token}`}
+                        <div className="flex gap-2 items-center">
+                          <div className="p-2 bg-white border rounded text-xs font-mono break-all flex-1">
+                            {`${window.location.origin}/kds?token=${display.token}`}
+                          </div>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/kds?token=${display.token}`)
+                              toast({
+                                title: 'Copied',
+                                description: 'Link copied to clipboard',
+                              })
+                            }}
+                            className="p-2 bg-white border rounded hover:bg-slate-50 text-slate-500 hover:text-slate-900"
+                            title="Copy Link"
+                          >
+                            <Copy size={16} />
+                          </button>
+                          <button
+                            onClick={() => window.open(`${window.location.origin}/kds?token=${display.token}`, '_blank')}
+                            className="p-2 bg-white border rounded hover:bg-slate-50 text-slate-500 hover:text-slate-900"
+                            title="Open Link"
+                          >
+                            <ExternalLink size={16} />
+                          </button>
                         </div>
                       </div>
                       <div className="flex justify-center">

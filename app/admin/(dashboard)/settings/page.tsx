@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAppSettings } from '@/hooks/useAppSettings'
-import { Settings, Clock, Bell, Mail, Shield, Utensils, Monitor, Save, Loader2 } from 'lucide-react'
+import { useAdminAppSettings } from '@/hooks/useAdminAppSettings'
+import { Settings, Clock, Bell, Mail, Shield, Utensils, Monitor, Save, Loader2, MessageSquare } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 
 const categories = [
   { id: 'general', label: 'General', icon: Settings },
@@ -11,6 +12,7 @@ const categories = [
   { id: 'kds', label: 'Kitchen Display', icon: Monitor },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'smtp', label: 'Email (SMTP)', icon: Mail },
+  { id: 'sms', label: 'SMS', icon: MessageSquare },
   { id: 'security', label: 'Security', icon: Shield },
 ]
 
@@ -105,7 +107,8 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function SettingsPage() {
-  const { settings, loading, bulkUpdateSettings } = useAppSettings()
+  const { toast } = useToast()
+  const { settings, loading, bulkUpdateSettings } = useAdminAppSettings()
   const [activeTab, setActiveTab] = useState('general')
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState<Record<string, SettingFormValue>>({})
@@ -148,14 +151,14 @@ export default function SettingsPage() {
     if (category === 'general') {
       const appName = typeof formData.app_name === 'string' ? formData.app_name : ''
       const timezone = typeof formData.timezone === 'string' ? formData.timezone : ''
+      const currency = typeof formData.currency === 'string' ? formData.currency : ''
+      
       if (!appName.trim()) newErrors.app_name = 'App name is required'
       if (!timezone) newErrors.timezone = 'Timezone is required'
+      if (!currency) newErrors.currency = 'Currency is required'
     }
     
     if (category === 'business') {
-      const currency = typeof formData.currency === 'string' ? formData.currency : ''
-      if (!currency) newErrors.currency = 'Currency is required'
-
       const taxRateValue = formData.tax_rate
       const taxRate =
         typeof taxRateValue === 'number'
@@ -210,9 +213,16 @@ export default function SettingsPage() {
     setSaving(false)
 
     if (result.success) {
-      alert(`${category.charAt(0).toUpperCase() + category.slice(1)} settings saved successfully!`)
+      toast({
+        title: "Settings saved",
+        description: `${category.charAt(0).toUpperCase() + category.slice(1)} settings have been saved successfully.`,
+      })
     } else {
-      alert(`Failed to save settings: ${result.error}`)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: `Failed to save settings: ${result.error}`,
+      })
     }
   }
 

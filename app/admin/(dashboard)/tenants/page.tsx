@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { supabaseAdmin as supabase } from '@/lib/supabase/client'
+import Link from 'next/link'
 import { Plus, Trash2 } from 'lucide-react'
 import { DataTable } from '@/components/data-table'
 import { getColumns, Tenant } from './columns'
+import { useToast } from '@/hooks/use-toast'
 
 type TenantSettingsRow = {
   id: string
@@ -12,6 +14,7 @@ type TenantSettingsRow = {
 }
 
 export default function AdminTenantsPage() {
+  const { toast } = useToast()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [showSuspendModal, setShowSuspendModal] = useState(false)
@@ -48,10 +51,15 @@ export default function AdminTenantsPage() {
       )
     } catch (err) {
       console.error('Failed to load tenants:', err)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load tenants. Please try again.",
+      })
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     loadTenants()
@@ -68,12 +76,21 @@ export default function AdminTenantsPage() {
 
       if (error) throw error
 
+      toast({
+        title: "Tenant suspended",
+        description: `${selectedTenant.name} has been suspended.`,
+      })
+
       await loadTenants()
       setShowSuspendModal(false)
       setSelectedTenant(null)
       setSuspendReason('')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to suspend tenant')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to suspend tenant',
+      })
     }
   }
 
@@ -85,11 +102,20 @@ export default function AdminTenantsPage() {
 
       if (error) throw error
 
+      toast({
+        title: "Tenant reactivated",
+        description: "The tenant has been successfully reactivated.",
+      })
+
       await loadTenants()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reactivate tenant')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to reactivate tenant',
+      })
     }
-  }, [loadTenants])
+  }, [loadTenants, toast])
 
   const columns = useMemo(() => getColumns(
     (tenant) => {
@@ -106,10 +132,6 @@ export default function AdminTenantsPage() {
   const handleDelete = async () => {
     if (!selectedTenant) return
 
-    if (!confirm(`Are you sure you want to delete "${selectedTenant.name}"? This will permanently delete ALL data including sales, inventory, users, etc.`)) {
-      return
-    }
-
     try {
       const { error } = await supabase.rpc('delete_tenant', {
         p_tenant_id: selectedTenant.id,
@@ -117,11 +139,20 @@ export default function AdminTenantsPage() {
 
       if (error) throw error
 
+      toast({
+        title: "Tenant deleted",
+        description: `${selectedTenant.name} has been permanently deleted.`,
+      })
+
       await loadTenants()
       setShowDeleteModal(false)
       setSelectedTenant(null)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete tenant')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to delete tenant',
+      })
     }
   }
 
@@ -132,14 +163,13 @@ export default function AdminTenantsPage() {
           <h1 className="text-3xl font-bold">Tenants</h1>
           <p className="text-muted-foreground">Manage all restaurant accounts</p>
         </div>
-        <button
-          onClick={() => setShowSuspendModal(true)}
-          disabled={showSuspendModal}
+        <Link
+          href="/admin/tenants/new"
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           <Plus size={16} />
           <span>Add Tenant</span>
-        </button>
+        </Link>
       </div>
 
       {loading ? (

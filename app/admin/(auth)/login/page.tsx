@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase/client'
+import { supabaseAdmin } from '@/lib/supabase/client'
 import { Shield } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -17,10 +17,10 @@ export default function AdminLoginPage() {
   const checkIfSuperAdmin = useCallback(async () => {
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseAdmin.auth.getUser()
     if (!user) return
 
-    const { data } = await supabase.rpc('is_superadmin')
+    const { data } = await supabaseAdmin.rpc('is_superadmin')
 
     if (data === true) {
       router.push('/admin')
@@ -36,7 +36,7 @@ export default function AdminLoginPage() {
     setLoading(true)
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
         email,
         password,
       })
@@ -44,10 +44,10 @@ export default function AdminLoginPage() {
       if (signInError) throw signInError
 
       if (data.user) {
-        const { data: isAdmin } = await supabase.rpc('is_superadmin')
+        const { data: isAdmin } = await supabaseAdmin.rpc('is_superadmin')
         
         if (!isAdmin) {
-          await supabase.auth.signOut()
+          await supabaseAdmin.auth.signOut()
           throw new Error('Access denied: Superadmin privileges required')
         }
 
@@ -91,7 +91,7 @@ export default function AdminLoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="admin@kitchensystem.com"
+              placeholder="stratbithq@gmail.com"
             />
           </div>
 

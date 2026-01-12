@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { Search, Clock, LogOut, X } from "lucide-react"
+import { Search, Clock, LogOut, X, History } from "lucide-react"
 import type { MenuItem, Table, SaleType, CashierSession, Customer, PaymentAdditionalData } from "@/types/database"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
@@ -13,9 +13,10 @@ import { OrderQueue } from "@/components/pos/order-queue"
 import { CategoryFilter } from "@/components/pos/category-filter"
 import { ProductGrid } from "@/components/pos/product-grid"
 import { OrderSidebar } from "@/components/pos/order-sidebar"
-import { RegisterModal } from "@/components/pos/register-modal"
+import { RegisterModal, SessionSummary } from "@/components/pos/register-modal"
 import { HeldOrdersModal, HeldOrder } from "@/components/pos/held-orders-modal"
 import { PaymentModal } from "@/components/pos/payment-modal"
+import { TransactionsModal, Transaction } from "@/components/pos/transactions-modal"
 
 type CartItem = {
   item: MenuItem
@@ -71,11 +72,13 @@ export default function POSPage() {
   const [customDiscount, setCustomDiscount] = useState<{ type: 'percentage' | 'fixed', value: number }>({ type: 'percentage', value: 0 })
   const [showHeldOrders, setShowHeldOrders] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showTransactionsModal, setShowTransactionsModal] = useState(false)
 
   // Cashier Session State
   const [cashierSession, setCashierSession] = useState<CashierSession | null>(null)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
   const [registerModalMode, setRegisterModalMode] = useState<'open' | 'close'>('open')
+  const [sessionSummary, setSessionSummary] = useState<SessionSummary | null>(null)
 
   // Order State
   const [cartItems, setCartItems] = useState<CartItem[]>([])
@@ -403,6 +406,7 @@ export default function POSPage() {
         // Re-open modal for next session
         setRegisterModalMode('open')
         setShowRegisterModal(true)
+        setSessionSummary(null)
       }
     } catch (error) {
       console.error(error)
@@ -412,9 +416,171 @@ export default function POSPage() {
     }
   }
 
-  const openCloseRegisterModal = () => {
+  const openCloseRegisterModal = async () => {
+    if (!cashierSession) return
+
     setRegisterModalMode('close')
     setShowRegisterModal(true)
+
+    // Calculate session summary
+    setIsProcessing(true)
+    try {
+        const { data: sales, error } = await supabase
+            .from('sales')
+            .select('total_amount, payment_method, payment_status')
+            .eq('tenant_id', cashierSession.tenant_id)
+            .eq('created_by', cashierSession.user_id)
+            .gte('created_at', cashierSession.opening_time)
+            .in('payment_status', ['paid']) // Only count paid sales
+        
+        if (error) throw error
+
+        let totalSales = 0
+        let cashSales = 0
+        let cardSales = 0
+        const transactionCount = sales?.length || 0
+
+        sales?.forEach(s => {
+            totalSales += s.total_amount
+            if (s.payment_method === 'cash') cashSales += s.total_amount
+            else if (s.payment_method === 'card') cardSales += s.total_amount
+        })
+
+        setSessionSummary({
+            totalSales,
+            cashSales,
+            cardSales,
+            transactionCount
+        })
+
+    } catch (err) {
+        console.error("Error calculating session summary:", err)
+        toast({ title: "Warning", description: "Could not calculate session summary", variant: "destructive" })
+    } finally {
+        setIsProcessing(false)
+    }
+  }
+
+  const handleDownloadReport = async () => {
+    if (!cashierSession) return
+
+    try {
+        const { data, error } = await supabase
+            .from('sales')
+            .select(`
+                order_number,
+                total_amount,
+                payment_status,
+                payment_method,
+                sale_date,
+                sale_time,
+                notes,
+                tables (table_number),
+                sale_items (quantity)
+            `)
+            .eq('tenant_id', cashierSession.tenant_id)
+            .eq('created_by', cashierSession.user_id)
+            .gte('created_at', cashierSession.opening_time)
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+
+        if (!data || data.length === 0) {
+            toast({ title: "No Data", description: "No transactions found for this session." })
+            return
+        }
+
+        const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Payment Method", "Status"]
+        const csvContent = [
+            headers.join(","),
+            ...data.map(s => {
+                let name = "Guest"
+                if (s.notes?.startsWith("Customer: ")) {
+                    name = s.notes.replace("Customer: ", "")
+                    if (name.includes(" | Note: ")) {
+                        name = name.split(" | Note: ")[0]
+                    }
+                }
+                const itemsCount = s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0
+                const tableNum = Array.isArray(s.tables) ? s.tables[0]?.table_number : (s.tables as any)?.table_number
+
+                return [
+                    s.order_number,
+                    new Date(s.sale_date).toLocaleDateString(),
+                    new Date(s.sale_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    `"${name.replace(/"/g, '""')}"`,
+                    tableNum || "",
+                    itemsCount,
+                    s.total_amount,
+                    s.payment_method || "",
+                    s.payment_status
+                ].join(",")
+            })
+        ].join("\n")
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.setAttribute("href", url)
+        link.setAttribute("download", `session_report_${new Date().toISOString().split('T')[0]}.csv`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+    } catch (err) {
+        console.error("Error generating report:", err)
+        toast({ title: "Error", description: "Failed to generate report", variant: "destructive" })
+    }
+  }
+
+  const handleVoid = async (t: Transaction) => {
+      try {
+          const { error: saleError } = await supabase
+              .from('sales')
+              .update({ payment_status: 'refunded' })
+              .eq('id', t.id)
+          
+          if (saleError) throw saleError
+
+          // Cancel KDS Order if exists
+          const { data: kdsOrder } = await supabase
+            .from('kds_orders')
+            .select('id')
+            .eq('sale_id', t.id)
+            .single()
+            
+          if (kdsOrder) {
+              await supabase
+                  .from('kds_orders')
+                  .update({ status: 'cancelled' })
+                  .eq('id', kdsOrder.id)
+          }
+
+          toast({ title: "Order Voided", description: `Order ${t.orderNumber} has been voided.` })
+          loadData() // Refresh data
+      } catch (err) {
+          console.error("Error voiding order:", err)
+          toast({ title: "Error", description: "Failed to void order", variant: "destructive" })
+          throw err // Propagate to modal to show error there if needed
+      }
+  }
+
+  const handleRefund = async (t: Transaction) => {
+      try {
+          const { error } = await supabase
+              .from('sales')
+              .update({ payment_status: 'refunded' })
+              .eq('id', t.id)
+          
+          if (error) throw error
+
+          toast({ title: "Order Refunded", description: `Order ${t.orderNumber} has been refunded.` })
+          loadData() // Refresh data
+      } catch (err) {
+          console.error("Error refunding order:", err)
+          toast({ title: "Error", description: "Failed to refund order", variant: "destructive" })
+          throw err
+      }
   }
 
   const cartTotal = useMemo(() => {
@@ -746,6 +912,10 @@ export default function POSPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
             </div>
+            <Button variant="outline" onClick={() => setShowTransactionsModal(true)} className="gap-2">
+                <History className="h-4 w-4" />
+                History
+            </Button>
             <Button variant="outline" onClick={() => setShowHeldOrders(true)} className="gap-2">
                 <Clock className="h-4 w-4" />
                 Held Orders
@@ -842,6 +1012,10 @@ export default function POSPage() {
         onSubmit={handleRegisterAction}
         onCancel={registerModalMode === 'close' ? () => setShowRegisterModal(false) : () => router.push('/dashboard')}
         isLoading={isProcessing}
+        sessionSummary={sessionSummary}
+        onDownloadReport={handleDownloadReport}
+        currency={currencySymbol}
+        openingTime={cashierSession?.opening_time}
       />
 
       <HeldOrdersModal 
@@ -850,6 +1024,16 @@ export default function POSPage() {
         heldOrders={heldOrders}
         onResumeOrder={resumeOrder}
         isLoading={isProcessing}
+        currency={currencySymbol}
+      />
+
+      <TransactionsModal
+        isOpen={showTransactionsModal}
+        onClose={() => setShowTransactionsModal(false)}
+        onRefund={handleRefund}
+        onVoid={handleVoid}
+        session={cashierSession}
+        currency={currencySymbol}
       />
 
       <PaymentModal 

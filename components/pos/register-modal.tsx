@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, X } from "lucide-react"
+import { Loader2, X, Download } from "lucide-react"
+import { formatCurrency } from "@/lib/utils"
+
+export interface SessionSummary {
+  totalSales: number
+  cashSales: number
+  cardSales: number
+  transactionCount: number
+}
 
 interface RegisterModalProps {
   isOpen: boolean
@@ -13,9 +21,23 @@ interface RegisterModalProps {
   onSubmit: (amount: number, notes: string) => Promise<void>
   onCancel?: () => void
   isLoading?: boolean
+  sessionSummary?: SessionSummary | null
+  onDownloadReport?: () => void
+  currency?: string
+  openingTime?: string | null
 }
 
-export function RegisterModal({ isOpen, mode, onSubmit, onCancel, isLoading }: RegisterModalProps) {
+export function RegisterModal({ 
+  isOpen, 
+  mode, 
+  onSubmit, 
+  onCancel, 
+  isLoading, 
+  sessionSummary, 
+  onDownloadReport,
+  currency = "USD",
+  openingTime
+}: RegisterModalProps) {
   const [amount, setAmount] = useState("")
   const [notes, setNotes] = useState("")
 
@@ -48,10 +70,49 @@ export function RegisterModal({ isOpen, mode, onSubmit, onCancel, isLoading }: R
             {mode === 'open' 
               ? 'Enter the opening cash amount to start your shift.' 
               : 'Enter the closing cash amount to end your shift.'}
+            {mode === 'close' && openingTime && (
+               <div className="mt-1 text-xs text-muted-foreground">
+                   Session Started: {new Date(openingTime).toLocaleString()}
+               </div>
+            )}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
+            {mode === 'close' && sessionSummary && (
+                <div className="bg-muted p-4 rounded-lg space-y-2 mb-4">
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider flex justify-between items-center">
+                        <span>Session Summary</span>
+                        {onDownloadReport && (
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={onDownloadReport} 
+                                title="Download Session Report"
+                                className="h-6 text-xs"
+                            >
+                                <Download className="h-3 w-3 mr-1" />
+                                Download Report
+                            </Button>
+                        )}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm pt-2">
+                        <span className="text-muted-foreground">Total Sales:</span>
+                        <span className="font-bold text-right">{formatCurrency(sessionSummary.totalSales, currency)}</span>
+                        
+                        <span className="text-muted-foreground">Cash Sales:</span>
+                        <span className="text-right">{formatCurrency(sessionSummary.cashSales, currency)}</span>
+                        
+                        <span className="text-muted-foreground">Card Sales:</span>
+                        <span className="text-right">{formatCurrency(sessionSummary.cardSales, currency)}</span>
+                        
+                        <span className="text-muted-foreground">Transactions:</span>
+                        <span className="text-right">{sessionSummary.transactionCount}</span>
+                    </div>
+                </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="amount">Amount</Label>
               <Input
@@ -76,15 +137,17 @@ export function RegisterModal({ isOpen, mode, onSubmit, onCancel, isLoading }: R
             </div>
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
-                {mode === "open" ? "Exit POS" : "Cancel"}
-              </Button>
-            )}
-            <Button type="submit" disabled={isLoading || !amount}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {mode === 'open' ? 'Open Register' : 'Close Register'}
-            </Button>
+            <div className="flex gap-2">
+                {onCancel && (
+                <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
+                    {mode === "open" ? "Exit POS" : "Cancel"}
+                </Button>
+                )}
+                <Button type="submit" disabled={isLoading || !amount}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {mode === 'open' ? 'Open Register' : 'Close Register'}
+                </Button>
+            </div>
           </CardFooter>
         </form>
       </Card>

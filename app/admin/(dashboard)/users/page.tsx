@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
+import { supabaseAdmin as supabase } from '@/lib/supabase/client'
 import { Search } from 'lucide-react'
 import { DataTable } from '@/components/data-table'
 import { getColumns, UserWithTenant } from './columns'
+import { impersonateUser } from '@/app/actions/impersonate'
+import { useToast } from '@/hooks/use-toast'
 
 export default function AdminUsersPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [users, setUsers] = useState<UserWithTenant[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -33,6 +36,11 @@ export default function AdminUsersPage() {
       setUsers(((data ?? []) as unknown) as UserWithTenant[])
     } catch (err) {
       console.error('Failed to load users:', err)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load users.",
+      })
     } finally {
       setLoading(false)
     }
@@ -52,19 +60,32 @@ export default function AdminUsersPage() {
     if (!confirm('You will be logged in as this user. Continue?')) return
 
     try {
-      await supabase.auth.signOut()
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: 'system@internal.admin',
-        password: process.env.NEXT_PUBLIC_SUPERADMIN_PASSWORD || '',
+      toast({
+        title: "Impersonating...",
+        description: "Please wait while we log you in as the user.",
       })
 
-      if (signInError) throw signInError
+      const result = await impersonateUser(userId)
+      
+      if (!result.success) {
+        throw new Error(result.error)
+      }
 
-      router.push(`/dashboard?impersonate=${userId}`)
+      // Sign out first to ensure clean state
+      await supabase.auth.signOut()
+      
+      // Navigate to the magic link
+      if (result.url) {
+        window.location.href = result.url
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to impersonate user')
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to impersonate user',
+      })
     }
-  }, [router])
+  }, [toast])
 
   const columns = useMemo(() => getColumns(handleImpersonate), [handleImpersonate])
 

@@ -7,7 +7,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
 }
 
-const email = process.env.SUPERADMIN_EMAIL || 'system@internal.admin'
+const email = process.env.SUPERADMIN_EMAIL || 'stratbithq@gmail.com'
 const password = process.env.SUPERADMIN_PASSWORD || process.env.NEXT_PUBLIC_SUPERADMIN_PASSWORD
 
 if (!password) {

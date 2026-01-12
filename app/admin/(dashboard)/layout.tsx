@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import { Shield, Building2, Users, Settings, LogOut, Menu, ChevronLeft } from 'lucide-react'
+import { createAdminClient } from '@/lib/supabase/server'
+import { Shield, Building2, Users, Settings, LogOut, Menu, ChevronLeft, User } from 'lucide-react'
 
 async function getSuperAdminStatus() {
-  const supabase = await createClient()
+  const supabase = await createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   
   if (!user) {
@@ -50,6 +50,7 @@ export default async function AdminDashboardLayout({
           </nav>
 
           <div className="p-4 border-t border-slate-700 space-y-2">
+            <NavLink href="/admin/profile" icon={User} label="My Profile" />
             <form action="/auth/signout" method="post">
               <button
                 type="submit"

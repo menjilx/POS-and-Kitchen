@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { supabaseAdmin as supabase } from '@/lib/supabase/client'
 import { Users, Building2, AlertTriangle, DollarSign } from 'lucide-react'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
@@ -104,7 +104,7 @@ export default function AdminDashboardPage() {
         suspendedTenants: suspendedCount,
       })
     } catch (err) {
-      console.error('Failed to load stats:', err)
+      console.error('Failed to load stats details:', err instanceof Error ? err.message : err)
     } finally {
       setLoading(false)
     }
