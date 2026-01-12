@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { Search, Clock, LogOut } from "lucide-react"
+import { Search, Clock, LogOut, X } from "lucide-react"
 import type { MenuItem, Table, SaleType, CashierSession, Customer, PaymentAdditionalData } from "@/types/database"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
@@ -41,6 +42,7 @@ type Discount = {
 }
 
 export default function POSPage() {
+  const router = useRouter()
   const { toast } = useToast()
   const { currencySymbol, formatCurrency } = useTenantSettings()
 
@@ -476,14 +478,20 @@ export default function POSPage() {
           if (additionalData.attachment) notes += ` | Attach: ${additionalData.attachment}`
       }
 
+      const normalizedPaymentMethod = paymentMethod === 'house_account' ? null : paymentMethod
+      const paymentNotes = additionalData?.notes ?? null
+      const paymentData = additionalData ?? {}
+
       if (activeSaleId) {
           // Update existing sale
-           const { error: saleError } = await supabase
+          const { error: saleError } = await supabase
             .from("sales")
             .update({
                 total_amount: cartTotal.total,
                 payment_status: paymentStatus,
-                payment_method: paymentMethod,
+                payment_method: normalizedPaymentMethod,
+                payment_notes: paymentNotes,
+                payment_data: paymentData,
                 notes: notes,
                 customer_id: selectedCustomer?.id || null,
             discount_amount: cartTotal.discount,
@@ -511,7 +519,9 @@ export default function POSPage() {
               table_id: tableId || null,
               total_amount: cartTotal.total,
               payment_status: paymentStatus,
-              payment_method: paymentMethod,
+              payment_method: normalizedPaymentMethod,
+              payment_notes: paymentNotes,
+              payment_data: paymentData,
               notes: notes,
               customer_id: selectedCustomer?.id || null,
               discount_amount: cartTotal.discount,
@@ -583,20 +593,26 @@ export default function POSPage() {
       return saleId
   }
   
-  const handlePaymentComplete = async (method: string, _amount: number, _isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => {
+  const handlePaymentComplete = async (method: string, receivedAmount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => {
       setIsProcessing(true)
       try {
-          // If house account, we might want to record it differently, but for now just 'house_account' method
-          await saveOrder('paid', method, undefined, additionalData)
+          const status = isHouseAccount ? 'pending' : 'paid'
+          const mergedAdditionalData = {
+            ...additionalData,
+            receivedAmount: isHouseAccount ? undefined : receivedAmount,
+          } satisfies PaymentAdditionalData
+
+          await saveOrder(status, method, undefined, mergedAdditionalData)
           
           toast({
               title: "Payment Successful",
-              description: `Order ${currentOrderId} has been paid via ${method.replace('_', ' ')}.`,
+              description: isHouseAccount
+                ? `Order ${currentOrderId} has been charged to house account.`
+                : `Order ${currentOrderId} has been paid via ${method.replace('_', ' ')}.`,
           })
           
           clearCart()
           loadData()
-          setShowPaymentModal(false) // Actually the modal handles showing receipt first
       } catch (err) {
           console.error(err)
           toast({ title: "Error", description: "Failed to process payment", variant: "destructive" })
@@ -672,6 +688,10 @@ export default function POSPage() {
       <div className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
         {/* Header / Search */}
         <div className="flex gap-4 mb-6">
+            <Button variant="secondary" onClick={() => router.push('/dashboard')} className="gap-2 shrink-0">
+                <X className="h-4 w-4" />
+                Exit POS
+            </Button>
             <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input 
@@ -775,7 +795,7 @@ export default function POSPage() {
         isOpen={showRegisterModal}
         mode={registerModalMode}
         onSubmit={handleRegisterAction}
-        onCancel={registerModalMode === 'close' ? () => setShowRegisterModal(false) : undefined}
+        onCancel={registerModalMode === 'close' ? () => setShowRegisterModal(false) : () => router.push('/dashboard')}
         isLoading={isProcessing}
       />
 

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 
 export default async function SuppliersPage() {
   const supabase = await createClient()
@@ -28,12 +29,12 @@ export default async function SuppliersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Suppliers</h1>
-        <a
+        <Link
           href="/dashboard/suppliers/new"
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           Add Supplier
-        </a>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -66,12 +67,12 @@ export default async function SuppliersPage() {
             )}
 
             <div className="flex gap-2">
-              <a
+              <Link
                 href={`/dashboard/suppliers/${supplier.id}`}
                 className="flex-1 text-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
               >
                 Edit
-              </a>
+              </Link>
             </div>
           </div>
         ))}

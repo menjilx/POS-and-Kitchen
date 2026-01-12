@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 
 interface RegisterModalProps {
   isOpen: boolean
@@ -29,7 +29,20 @@ export function RegisterModal({ isOpen, mode, onSubmit, onCancel, isLoading }: R
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <Card className="w-full max-w-md">
-        <CardHeader>
+        <CardHeader className="relative">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-2 top-2"
+              onClick={onCancel}
+              disabled={isLoading}
+              aria-label={mode === "open" ? "Exit POS" : "Close"}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
           <CardTitle>{mode === 'open' ? 'Open Register' : 'Close Register'}</CardTitle>
           <CardDescription>
             {mode === 'open' 
@@ -65,7 +78,7 @@ export function RegisterModal({ isOpen, mode, onSubmit, onCancel, isLoading }: R
           <CardFooter className="flex justify-end gap-2">
             {onCancel && (
               <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
-                Cancel
+                {mode === "open" ? "Exit POS" : "Cancel"}
               </Button>
             )}
             <Button type="submit" disabled={isLoading || !amount}>

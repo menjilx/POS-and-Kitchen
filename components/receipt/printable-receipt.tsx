@@ -15,6 +15,8 @@ export interface ReceiptSettings {
   showCustomerName: boolean
   showTax: boolean
   showDiscount: boolean
+  showChange: boolean
+  showReceiptAfterPayment: boolean
   showQrCode: boolean
 }
 
@@ -23,12 +25,18 @@ export interface ReceiptData {
   subtotal: number
   tax: number
   discount: number
+  discountName?: string | null
   total: number
   cashierName?: string
   customerName?: string
   orderNumber: string
   date: string
   paymentMethod?: string
+  paymentStatus?: string
+  paymentRef?: string
+  paymentNotes?: string
+  receivedAmount?: number
+  changeAmount?: number
   currency?: string
 }
 
@@ -144,7 +152,7 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
              )}
               {settings.showDiscount && data.discount > 0 && (
                 <div className="flex justify-between">
-                    <span>Discount</span>
+                    <span>Discount{data.discountName ? ` (${data.discountName})` : ''}</span>
                     <span>-{formatPrice(data.discount)}</span>
                 </div>
              )}
@@ -153,11 +161,41 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
 
         <div className="mb-4">
            <p className="text-center mb-2">********************************</p>
+           {data.paymentStatus && (
+              <div className="flex justify-between">
+                <span>Payment Status</span>
+                <span>{data.paymentStatus.toUpperCase()}</span>
+              </div>
+           )}
            {data.paymentMethod && (
-                <div className="flex justify-between">
-                    <span>Payment Method</span>
-                    <span>{data.paymentMethod.toUpperCase()}</span>
-                </div>
+              <div className="flex justify-between">
+                <span>Payment Method</span>
+                <span>{data.paymentMethod.toUpperCase()}</span>
+              </div>
+           )}
+           {settings.showChange && typeof data.receivedAmount === 'number' && (
+              <div className="flex justify-between">
+                <span>Received</span>
+                <span>{formatPrice(data.receivedAmount)}</span>
+              </div>
+           )}
+           {settings.showChange && typeof data.changeAmount === 'number' && data.changeAmount > 0 && (
+              <div className="flex justify-between">
+                <span>Change</span>
+                <span>{formatPrice(data.changeAmount)}</span>
+              </div>
+           )}
+           {data.paymentRef && (
+              <div className="flex justify-between">
+                <span>Ref</span>
+                <span className="text-right">{data.paymentRef}</span>
+              </div>
+           )}
+           {data.paymentNotes && (
+              <div className="flex justify-between">
+                <span>Notes</span>
+                <span className="text-right">{data.paymentNotes}</span>
+              </div>
            )}
         </div>
 

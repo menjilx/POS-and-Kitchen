@@ -1,12 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
-export default function NewSupplierPage() {
+export default function EditSupplierPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
   
   const [formData, setFormData] = useState({
     name: '',
@@ -17,7 +19,40 @@ export default function NewSupplierPage() {
     notes: '',
   })
   const [loading, setLoading] = useState(false)
+  const [fetching, setFetching] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const fetchSupplier = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('suppliers')
+          .select('*')
+          .eq('id', id)
+          .single()
+
+        if (error) throw error
+        if (data) {
+          setFormData({
+            name: data.name || '',
+            contact_person: data.contact_person || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            address: data.address || '',
+            notes: data.notes || '',
+          })
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load supplier')
+      } finally {
+        setFetching(false)
+      }
+    }
+
+    if (id) {
+      fetchSupplier()
+    }
+  }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,32 +63,31 @@ export default function NewSupplierPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
-      const { error } = await supabase.from('suppliers').insert({
-        tenant_id: userData.tenant_id,
-        name: formData.name,
-        contact_person: formData.contact_person,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        notes: formData.notes,
-      })
+      const { error } = await supabase
+        .from('suppliers')
+        .update({
+          name: formData.name,
+          contact_person: formData.contact_person,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          notes: formData.notes,
+        })
+        .eq('id', id)
 
       if (error) throw error
 
       router.push('/dashboard/suppliers')
+      router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create supplier')
+      setError(err instanceof Error ? err.message : 'Failed to update supplier')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (fetching) {
+    return <div className="p-6">Loading...</div>
   }
 
   return (
@@ -62,7 +96,7 @@ export default function NewSupplierPage() {
         <Link href="/dashboard/suppliers" className="text-primary hover:underline">
           ← Back
         </Link>
-        <h1 className="text-3xl font-bold">Add Supplier</h1>
+        <h1 className="text-3xl font-bold">Edit Supplier</h1>
       </div>
 
       {error && (
@@ -165,7 +199,7 @@ export default function NewSupplierPage() {
             disabled={loading}
             className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? 'Creating...' : 'Create Supplier'}
+            {loading ? 'Updating...' : 'Update Supplier'}
           </button>
         </form>
       </div>

@@ -1,19 +1,50 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 
-export default function NewLocationPage() {
+export default function EditLocationPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
   
   const [formData, setFormData] = useState({
     name: '',
     address: '',
   })
   const [loading, setLoading] = useState(false)
+  const [fetching, setFetching] = useState(true)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('locations')
+          .select('*')
+          .eq('id', id)
+          .single()
+
+        if (error) throw error
+        if (data) {
+          setFormData({
+            name: data.name || '',
+            address: data.address || '',
+          })
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load location')
+      } finally {
+        setFetching(false)
+      }
+    }
+
+    if (id) {
+      fetchLocation()
+    }
+  }, [id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,28 +55,27 @@ export default function NewLocationPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
-      const { error } = await supabase.from('locations').insert({
-        tenant_id: userData.tenant_id,
-        name: formData.name,
-        address: formData.address,
-      })
+      const { error } = await supabase
+        .from('locations')
+        .update({
+          name: formData.name,
+          address: formData.address,
+        })
+        .eq('id', id)
 
       if (error) throw error
 
       router.push('/dashboard/locations')
+      router.refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create location')
+      setError(err instanceof Error ? err.message : 'Failed to update location')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (fetching) {
+    return <div className="p-6">Loading...</div>
   }
 
   return (
@@ -54,7 +84,7 @@ export default function NewLocationPage() {
         <Link href="/dashboard/locations" className="text-primary hover:underline">
           ← Back
         </Link>
-        <h1 className="text-3xl font-bold">Add Location</h1>
+        <h1 className="text-3xl font-bold">Edit Location</h1>
       </div>
 
       {error && (
@@ -99,7 +129,7 @@ export default function NewLocationPage() {
             disabled={loading}
             className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? 'Creating...' : 'Create Location'}
+            {loading ? 'Updating...' : 'Update Location'}
           </button>
         </form>
       </div>

@@ -76,4 +76,6 @@ export type PaymentAdditionalData = {
   ref?: string
   notes?: string
   attachment?: string | null
+  receivedAmount?: number
+  changeAmount?: number
 }

@@ -63,6 +63,8 @@ export default function SettingsPage() {
       showCustomerName: true,
       showTax: true,
       showDiscount: true,
+      showChange: true,
+      showReceiptAfterPayment: true,
       showQrCode: true
     }
   })
@@ -227,7 +229,20 @@ export default function SettingsPage() {
       }
 
       if (data.settings) {
-        setSettings(data.settings as unknown as TenantSettings)
+        setSettings((prev) => {
+          const next = data.settings as unknown as TenantSettings
+          const nextReceipt = (next.receipt ?? {}) as Partial<ReceiptSettings>
+          return {
+            ...prev,
+            ...next,
+            receipt: prev.receipt
+              ? {
+                  ...prev.receipt,
+                  ...nextReceipt,
+                }
+              : (next.receipt as ReceiptSettings | undefined),
+          }
+        })
       }
 
       toast({
@@ -831,6 +846,8 @@ export default function SettingsPage() {
                       { label: 'Show Customer Name', key: 'showCustomerName' },
                       { label: 'Show Tax', key: 'showTax' },
                       { label: 'Show Discount', key: 'showDiscount' },
+                      { label: 'Show Change', key: 'showChange' },
+                      { label: 'Show Receipt After Payment', key: 'showReceiptAfterPayment' },
                     ].map((item) => (
                       <div key={item.key} className="flex items-center justify-between">
                         <label className="text-sm font-medium">{item.label}</label>
@@ -899,6 +916,8 @@ export default function SettingsPage() {
                         orderNumber: 'ORD-0042',
                         date: new Date().toLocaleString(),
                         paymentMethod: 'cash',
+                        receivedAmount: 30,
+                        changeAmount: 1.93,
                         currency: settings.currency
                       }}
                     />

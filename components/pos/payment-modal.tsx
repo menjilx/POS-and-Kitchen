@@ -134,11 +134,20 @@ export function PaymentModal({
     // I will implement the UI fields now. 
     
     await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account', {
-        ref: cardRef,
-        notes: cardNotes,
-        attachment: attachmentName
+      ref: cardRef,
+      notes: cardNotes,
+      attachment: attachmentName,
+      receivedAmount: paymentMethod === 'cash' ? amount : undefined,
+      changeAmount: paymentMethod === 'cash' ? change : undefined,
     })
-    setShowReceipt(true)
+
+    const showReceiptAfterPayment = tenantSettings.receipt?.showReceiptAfterPayment ?? true
+
+    if (showReceiptAfterPayment) {
+      setShowReceipt(true)
+    } else {
+      onClose()
+    }
   }
 
   const handlePrintReceipt = () => {
@@ -165,6 +174,8 @@ export function PaymentModal({
                         orderNumber,
                         date: new Date().toLocaleString(),
                         paymentMethod,
+                        receivedAmount: paymentMethod === 'cash' ? (parseFloat(receivedAmount) || 0) : undefined,
+                        changeAmount: paymentMethod === 'cash' ? change : undefined,
                         currency
                     }}
                 />

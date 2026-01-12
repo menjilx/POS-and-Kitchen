@@ -42,9 +42,9 @@ async function debugReports() {
    let adminClient
    
    if (serviceRoleKey) {
-     console.log("Using Service Role Key")
-     adminClient = createClient(supabaseUrl, serviceRoleKey)
-   } else {
+    console.log("Using Service Role Key")
+    adminClient = createClient(supabaseUrl as string, serviceRoleKey)
+  } else {
     console.log("No Service Role Key found, trying with Anon Key (might fail RLS)")
     adminClient = supabase
   }

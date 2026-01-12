@@ -20,6 +20,8 @@ export type TenantSettings = {
     showCustomerName: boolean
     showTax: boolean
     showDiscount: boolean
+    showChange: boolean
+    showReceiptAfterPayment: boolean
     showQrCode: boolean
   }
 }
@@ -49,6 +51,8 @@ const defaultSettings: TenantSettings = {
     showCustomerName: true,
     showTax: true,
     showDiscount: true,
+    showChange: true,
+    showReceiptAfterPayment: true,
     showQrCode: true
   }
 }
@@ -89,7 +93,15 @@ export function useTenantSettings(): UseTenantSettingsResult {
       if (tenantError) throw tenantError
 
       if (tenantData?.settings) {
-        setSettings(tenantData.settings as unknown as TenantSettings)
+        const next = tenantData.settings as unknown as TenantSettings
+        const mergedReceipt = next.receipt
+          ? { ...defaultSettings.receipt, ...next.receipt }
+          : defaultSettings.receipt
+        setSettings({
+          ...defaultSettings,
+          ...next,
+          receipt: mergedReceipt,
+        })
       } else {
         setSettings(defaultSettings)
       }
@@ -142,4 +154,3 @@ export function useTenantSettings(): UseTenantSettingsResult {
     formatCurrency,
   }
 }
-
