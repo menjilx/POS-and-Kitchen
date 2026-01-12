@@ -11,6 +11,25 @@ import { Customer } from "@/types/database"
 import { useToast } from "@/hooks/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
+const normalizeCustomerName = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+
+const isReservedWalkInCustomerName = (value: string) => {
+  const normalized = normalizeCustomerName(value)
+  return (
+    normalized === 'walk in' ||
+    normalized === 'walk in customer' ||
+    normalized === 'walkin' ||
+    normalized === 'walkin customer'
+  )
+}
+
+const isCanonicalWalkInCustomerName = (value: string) => normalizeCustomerName(value) === 'walk in'
+
 interface CustomerDialogProps {
   selectedCustomer: Customer | null
   onSelect: (customer: Customer | null) => void
@@ -55,7 +74,8 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
       const { data, error } = await queryBuilder
 
       if (error) throw error
-      setCustomers(data || [])
+      const filtered = (data || []).filter((c) => !isReservedWalkInCustomerName(c.name))
+      setCustomers(filtered)
     } catch (error) {
       console.error('Error searching customers:', JSON.stringify(error, null, 2))
       // Only show toast if it's a real error, not just empty result or cancellation
@@ -84,6 +104,15 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
         title: "Required Field",
         description: "Customer name is required",
         variant: "destructive"
+      })
+      return
+    }
+
+    if (isReservedWalkInCustomerName(newCustomer.name)) {
+      toast({
+        title: "Invalid name",
+        description: "Walk-in Customer is a system customer. Please use another name.",
+        variant: "destructive",
       })
       return
     }
@@ -160,16 +189,36 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
           targetTenantId = userData.tenant_id
       }
 
-      // Check if Walk-in exists
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('customers')
         .select('*')
         .eq('tenant_id', targetTenantId)
-        .eq('name', 'Walk-in')
-        .single()
+        .in('name', ['Walk-in', 'Walk in', 'Walk-in Customer', 'Walkin', 'Walkin Customer'])
+        .limit(10)
 
-      if (existing) {
-        onSelect(existing)
+      if (!existingError && existing && existing.length > 0) {
+        const active = existing.filter((c) => c.is_active !== false)
+        const candidates = active.length > 0 ? active : existing
+        const canonical = candidates.find((c) => isCanonicalWalkInCustomerName(c.name))
+        const chosen = canonical ?? candidates[0]
+
+        if (!canonical && !isCanonicalWalkInCustomerName(chosen.name)) {
+          const { data: existingCanonical } = await supabase
+            .from('customers')
+            .select('id')
+            .eq('tenant_id', targetTenantId)
+            .eq('name', 'Walk-in')
+            .maybeSingle()
+
+          if (!existingCanonical) {
+            await supabase
+              .from('customers')
+              .update({ name: 'Walk-in' })
+              .eq('id', chosen.id)
+          }
+        }
+
+        onSelect(chosen)
         setOpen(false)
         return
       }
@@ -216,7 +265,9 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                     <User className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className={`truncate ${selectedCustomer ? "font-medium" : "text-muted-foreground"}`}>
-                        {selectedCustomer ? selectedCustomer.name : "Walk-in Customer"}
+                        {selectedCustomer
+                          ? (isReservedWalkInCustomerName(selectedCustomer.name) ? "Walk-in Customer" : selectedCustomer.name)
+                          : "Walk-in Customer"}
                     </span>
                 </div>
                 {/* Visual indicator that it's clickable/selectable */}

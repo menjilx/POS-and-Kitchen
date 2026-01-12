@@ -1,6 +1,6 @@
 export default function Home() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100">
       <div className="max-w-md w-full text-center space-y-8 p-8">
         <div>
           <h1 className="text-5xl font-bold text-gray-900 mb-4">

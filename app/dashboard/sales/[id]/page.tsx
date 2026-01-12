@@ -54,6 +54,11 @@ type SaleDetail = {
   discount_amount: number
   discount_name: string | null
   sale_items: SaleItemWithDetails[]
+  cashier: {
+    id: string
+    email: string
+    full_name: string | null
+  } | null
   customers: {
     name: string
     email: string | null
@@ -77,7 +82,6 @@ export default function SaleDetailPage() {
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false)
   const [updatingKdsOrderId, setUpdatingKdsOrderId] = useState<string | null>(null)
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings | null>(null)
-  const [cashierName, setCashierName] = useState<string>('')
   const [printingReceipt, setPrintingReceipt] = useState(false)
 
   useEffect(() => {
@@ -88,8 +92,6 @@ export default function SaleDetailPage() {
         router.push('/login')
         return
       }
-
-      setCashierName(user.user_metadata?.full_name || user.email || '')
 
       const { data: userData } = await supabase
         .from('users')
@@ -120,6 +122,7 @@ export default function SaleDetailPage() {
             *,
             menu_items (name)
           ),
+          cashier:users!sales_created_by_fkey (id, email, full_name),
           customers (name, email, phone),
           tables (table_number),
           kds_orders (id, status, assigned_station, started_at, completed_at)
@@ -264,12 +267,14 @@ export default function SaleDetailPage() {
     return <div className="p-8 flex justify-center">Sale not found</div>
   }
 
+  const cashierLabel = sale.cashier?.full_name || sale.cashier?.email || '-'
+
   const subtotal = sale.total_amount - sale.tax_amount + sale.discount_amount
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {receiptSettings && (
-        <div className="hidden print:block fixed inset-0 z-50 bg-white p-0 m-0 w-full h-full overflow-hidden">
+        <div className="block fixed -left-[10000px] top-0 z-50 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
           <PrintableReceipt
             settings={receiptSettings}
             data={{
@@ -283,7 +288,7 @@ export default function SaleDetailPage() {
               discount: sale.discount_amount,
               discountName: sale.discount_name,
               total: sale.total_amount,
-              cashierName: cashierName || undefined,
+              cashierName: cashierLabel === '-' ? undefined : cashierLabel,
               customerName: sale.customers?.name || 'Walk-in Customer',
               orderNumber: sale.order_number,
               date: new Date(sale.sale_time).toLocaleString(),
@@ -417,7 +422,7 @@ export default function SaleDetailPage() {
                                         onValueChange={(value) => updateKdsStatus(kds.id, value as KdsOrderStatus)}
                                         disabled={updatingKdsOrderId === kds.id}
                                       >
-                                        <SelectTrigger className="h-8 w-[140px]">
+                                        <SelectTrigger className="h-8 w-35">
                                           <SelectValue placeholder="Set status" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -471,6 +476,10 @@ export default function SaleDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                     <div>
+                        <p className="text-sm text-muted-foreground">Cashier</p>
+                        <p className="font-medium">{cashierLabel}</p>
+                    </div>
+                    <div>
                         <p className="text-sm text-muted-foreground">Date</p>
                         <p className="font-medium">{new Date(sale.sale_time).toLocaleString()}</p>
                     </div>
@@ -495,7 +504,7 @@ export default function SaleDetailPage() {
                             onValueChange={(value) => updatePaymentStatus(value as PaymentStatus)}
                             disabled={updatingPaymentStatus}
                           >
-                            <SelectTrigger className="h-8 w-[160px]">
+                            <SelectTrigger className="h-8 w-40">
                               <SelectValue placeholder="Set payment" />
                             </SelectTrigger>
                             <SelectContent>
@@ -518,7 +527,7 @@ export default function SaleDetailPage() {
                             onValueChange={(value) => updatePaymentMethod(value)}
                             disabled={updatingPaymentMethod}
                           >
-                            <SelectTrigger className="h-8 w-[160px]">
+                            <SelectTrigger className="h-8 w-40">
                               <SelectValue placeholder="Set method" />
                             </SelectTrigger>
                             <SelectContent>

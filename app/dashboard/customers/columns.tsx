@@ -19,7 +19,23 @@ export const columns: ColumnDef<Customer>[] = [
   {
     accessorKey: "name",
     header: "Name",
-    cell: ({ row }) => <span className="font-medium">{row.getValue("name")}</span>,
+    cell: ({ row }) => {
+      const value = String(row.getValue("name") ?? "")
+      const normalized = value
+        .trim()
+        .toLowerCase()
+        .replace(/[-_]/g, ' ')
+        .replace(/\s+/g, ' ')
+
+      const isReserved =
+        normalized === 'walk in' ||
+        normalized === 'walk in customer' ||
+        normalized === 'walkin' ||
+        normalized === 'walkin customer'
+
+      const displayName = isReserved ? 'Walk-in Customer' : value
+      return <span className="font-medium">{displayName}</span>
+    },
   },
   {
     accessorKey: "email",
@@ -34,7 +50,7 @@ export const columns: ColumnDef<Customer>[] = [
   {
     accessorKey: "address",
     header: "Address",
-    cell: ({ row }) => <span className="max-w-[200px] truncate block" title={row.getValue("address") || ''}>{row.getValue("address") || '-'}</span>,
+    cell: ({ row }) => <span className="max-w-50 truncate block" title={row.getValue("address") || ''}>{row.getValue("address") || '-'}</span>,
   },
   {
     accessorKey: "is_active",

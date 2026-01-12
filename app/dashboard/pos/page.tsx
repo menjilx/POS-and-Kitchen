@@ -124,7 +124,7 @@ export default function POSPage() {
     setTenantId(tenantId)
 
     const [
-        { data: walkIn },
+        { data: walkInCandidates },
         { data: displays },
         { data: session },
         { data: tenantData },
@@ -139,8 +139,8 @@ export default function POSPage() {
           .from('customers')
           .select('*')
           .eq('tenant_id', tenantId)
-          .eq('name', 'Walk-in')
-          .single(),
+          .in('name', ['Walk-in', 'Walk in', 'Walk-in Customer', 'Walkin', 'Walkin Customer'])
+          .limit(10),
         
         // Fetch Kitchen Displays
         supabase
@@ -205,8 +205,19 @@ export default function POSPage() {
     ])
 
     // Process Walk-in
-    if (walkIn) {
-      setSelectedCustomer(walkIn)
+    if (walkInCandidates && walkInCandidates.length > 0) {
+      const normalizeName = (value: string) =>
+        value
+          .trim()
+          .toLowerCase()
+          .replace(/[-_]/g, ' ')
+          .replace(/\s+/g, ' ')
+
+      const isCanonical = (value: string) => normalizeName(value) === 'walk in'
+      const active = walkInCandidates.filter((c) => c.is_active !== false)
+      const candidates = active.length > 0 ? active : walkInCandidates
+      const canonical = candidates.find((c) => isCanonical(String(c.name ?? '')))
+      setSelectedCustomer((canonical ?? candidates[0]) as Customer)
     }
 
     // Process Displays

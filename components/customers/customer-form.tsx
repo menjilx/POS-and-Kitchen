@@ -21,6 +21,13 @@ import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
 import { Customer } from "@/types/database"
 
+const normalizeCustomerName = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
+
+const isReservedWalkInCustomerName = (value: string) => {
+  const normalized = normalizeCustomerName(value)
+  return normalized === 'walk-in' || normalized === 'walk-in customer'
+}
+
 const formSchema = z.object({
   name: z.string().min(2, {
     message: "Name must be at least 2 characters.",
@@ -56,6 +63,17 @@ export function CustomerForm({ initialData, tenantId }: CustomerFormProps) {
     setLoading(true)
 
     try {
+      if (isReservedWalkInCustomerName(values.name)) {
+        if (!initialData || normalizeCustomerName(initialData.name) !== 'walk-in') {
+          toast({
+            title: "Invalid name",
+            description: "Walk-in Customer is a system customer. Please use another name.",
+            variant: "destructive",
+          })
+          return
+        }
+      }
+
       if (initialData) {
         const { error } = await supabase
           .from("customers")

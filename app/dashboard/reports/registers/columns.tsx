@@ -72,7 +72,7 @@ export const getColumns = (currency: string): ColumnDef<RegisterSessionWithUser>
     accessorKey: "notes",
     header: "Notes",
     cell: ({ row }) => {
-      return <div className="text-sm text-muted-foreground truncate max-w-[200px]">{row.getValue("notes") || '-'}</div>
+      return <div className="text-sm text-muted-foreground truncate max-w-50">{row.getValue("notes") || '-'}</div>
     },
   },
 ]

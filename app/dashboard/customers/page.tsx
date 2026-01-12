@@ -9,6 +9,25 @@ import { columns, Customer } from './columns'
 export default async function CustomersPage() {
   const supabase = await createClient()
 
+  const normalizeWalkInName = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[-_]/g, ' ')
+      .replace(/\s+/g, ' ')
+
+  const isReservedWalkInCustomerName = (value: string) => {
+    const normalized = normalizeWalkInName(value)
+    return (
+      normalized === 'walk in' ||
+      normalized === 'walk in customer' ||
+      normalized === 'walkin' ||
+      normalized === 'walkin customer'
+    )
+  }
+
+  const isCanonicalWalkInCustomerName = (value: string) => normalizeWalkInName(value) === 'walk in'
+
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect('/login')
@@ -29,7 +48,23 @@ export default async function CustomersPage() {
     .eq('tenant_id', currentUser.tenant_id)
     .order('created_at', { ascending: false })
 
-  const customers = (customersData || []) as unknown as Customer[]
+  const allCustomers = (customersData || []) as Array<Record<string, unknown>>
+
+  const reserved = allCustomers.filter((c) => isReservedWalkInCustomerName(String(c.name ?? '')))
+  const nonReserved = allCustomers.filter((c) => !isReservedWalkInCustomerName(String(c.name ?? '')))
+
+  const canonical = reserved.find((c) => isCanonicalWalkInCustomerName(String(c.name ?? '')))
+  const reservedSortedOldestFirst = [...reserved].sort((a, b) => {
+    const aTime = new Date(String(a.created_at ?? 0)).getTime()
+    const bTime = new Date(String(b.created_at ?? 0)).getTime()
+    return aTime - bTime
+  })
+
+  const keepReserved = canonical ?? reservedSortedOldestFirst[0]
+  const customers = ([
+    ...(keepReserved ? [keepReserved] : []),
+    ...nonReserved,
+  ] as unknown) as Customer[]
 
   return (
     <div className="space-y-6">
