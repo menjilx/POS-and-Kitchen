@@ -3,8 +3,7 @@ import { formatCurrency } from '@/lib/utils'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, FileText, Calendar, Building, Paperclip, Download, Edit } from 'lucide-react'
-import type { PurchaseItem, Ingredient, Location } from '@/types/database'
-
+// type PurchaseItem, Ingredient, Location removed as they were unused
 import { PurchaseItemsTable } from './items-table'
 import type { PurchaseItemWithDetails } from './columns'
 

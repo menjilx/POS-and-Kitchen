@@ -1,4 +1,5 @@
 import React from 'react'
+import Image from 'next/image'
 import { QRCodeSVG } from 'qrcode.react'
 
 export interface ReceiptSettings {
@@ -67,7 +68,7 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
         <div className="flex flex-col items-center text-center mb-4">
           {settings.showLogo && settings.logoUrl && (
             <div className="mb-2 relative w-16 h-16">
-              <img src={settings.logoUrl} alt="Logo" className="object-contain w-16 h-16" />
+              <Image src={settings.logoUrl} alt="Logo" width={64} height={64} className="object-contain w-16 h-16" />
             </div>
           )}
           <h1 className="text-xl font-bold uppercase mb-1">{settings.headerText}</h1>

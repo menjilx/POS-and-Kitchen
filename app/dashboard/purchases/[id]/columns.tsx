@@ -33,7 +33,7 @@ export const getColumns = (currency: string): ColumnDef<PurchaseItemWithDetails>
   },
   {
     accessorKey: "quantity",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Quantity</div>
     },
     cell: ({ row }) => {
@@ -42,7 +42,7 @@ export const getColumns = (currency: string): ColumnDef<PurchaseItemWithDetails>
   },
   {
     accessorKey: "unit_price",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Unit Price</div>
     },
     cell: ({ row }) => {
@@ -52,7 +52,7 @@ export const getColumns = (currency: string): ColumnDef<PurchaseItemWithDetails>
   },
   {
     id: "total",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Total</div>
     },
     cell: ({ row }) => {

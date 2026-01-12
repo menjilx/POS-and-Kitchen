@@ -53,7 +53,7 @@ async function debugReports() {
   // We'll try to find a user with role 'owner'
   let ownerUser
   if (serviceRoleKey) {
-      const { data: users, error: usersError } = await adminClient
+      const { data: users } = await adminClient
         .from('users')
         .select('id, email, tenant_id')
         .eq('role', 'owner')
@@ -116,8 +116,7 @@ async function debugReports() {
 
   // 3. Test RPC get_ingredient_cost_trends
   console.log('\n--- Testing RPC get_ingredient_cost_trends ---')
-  const startDate = '2020-01-01' 
-  const endDate = '2030-12-31'
+  // Variables startDate and endDate removed as they were unused
   
   // Note: If we are using service role key, auth.uid() might be null in the RPC unless we impersonate
   // But our RPC has a check: SELECT tenant_id INTO v_user_tenant FROM users WHERE id = auth.uid();

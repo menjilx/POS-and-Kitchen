@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { Plus, Trash2 } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
 import { DataTable } from '@/components/data-table'
 import { getColumns, Tenant } from './columns'
 

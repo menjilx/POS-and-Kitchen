@@ -59,7 +59,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
   },
   {
     accessorKey: "selling_price",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Price</div>
     },
     cell: ({ row }) => {
@@ -68,7 +68,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
   },
   {
     accessorKey: "total_cost",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Cost</div>
     },
     cell: ({ row }) => {
@@ -77,7 +77,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
   },
   {
     accessorKey: "contribution_margin",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Margin</div>
     },
     cell: ({ row }) => {
@@ -96,7 +96,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
   },
   {
     id: "actions",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-center">Action</div>
     },
     cell: ({ row }) => {

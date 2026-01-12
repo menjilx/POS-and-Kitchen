@@ -24,7 +24,7 @@ export const getColumns = (currency: string): ColumnDef<SaleItemWithDetails>[] =
   },
   {
     accessorKey: "quantity",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Qty</div>
     },
     cell: ({ row }) => {
@@ -33,7 +33,7 @@ export const getColumns = (currency: string): ColumnDef<SaleItemWithDetails>[] =
   },
   {
     accessorKey: "unit_price",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Price</div>
     },
     cell: ({ row }) => {
@@ -43,7 +43,7 @@ export const getColumns = (currency: string): ColumnDef<SaleItemWithDetails>[] =
   },
   {
     accessorKey: "total_price",
-    header: ({ column }) => {
+    header: () => {
       return <div className="text-right">Total</div>
     },
     cell: ({ row }) => {

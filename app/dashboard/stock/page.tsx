@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { Plus } from 'lucide-react'
-import type { Location, Stock, StockAdjustmentType } from '@/types/database'
+import type { Location, StockAdjustmentType } from '@/types/database'
 import { DataTable } from '@/components/data-table'
 import { getColumns, StockWithIngredient } from './columns'
 
