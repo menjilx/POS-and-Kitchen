@@ -69,6 +69,11 @@ type OrderWithItems = KDSOrder & {
   kds_order_items: (KDSOrderItem & {
     menu_items: { name: string } | null
   })[]
+  sales?: {
+    notes: string | null
+    tables: { table_number: string } | null
+    reservations: { customer_name: string } | null
+  } | null
 }
 
 function KDSContent() {
@@ -87,6 +92,11 @@ function KDSContent() {
       .from('kds_orders')
       .select(`
         *,
+        sales (
+          notes,
+          tables (table_number),
+          reservations (customer_name)
+        ),
         kds_order_items (
           *,
           menu_items (name)
@@ -321,6 +331,31 @@ function KDSContent() {
     }
   }
 
+  const getCustomerName = (order: OrderWithItems) => {
+    const reservation = Array.isArray(order.sales?.reservations)
+      ? order.sales?.reservations?.[0]
+      : order.sales?.reservations
+    const reservationName = reservation?.customer_name?.trim()
+    if (reservationName) return reservationName
+
+    const notes = order.sales?.notes ?? ''
+    if (notes.startsWith('Customer: ')) {
+      let name = notes.replace('Customer: ', '')
+      if (name.includes(' | Note: ')) {
+        name = name.split(' | Note: ')[0]
+      }
+      const trimmed = name.trim()
+      if (trimmed) return trimmed
+    }
+
+    return 'Guest'
+  }
+
+  const getTableNumber = (order: OrderWithItems) => {
+    const table = Array.isArray(order.sales?.tables) ? order.sales?.tables?.[0] : order.sales?.tables
+    return table?.table_number
+  }
+
   const groupedOrders = {
     pending: orders.filter(o => o.status === 'pending'),
     preparing: orders.filter(o => o.status === 'preparing'),
@@ -435,6 +470,16 @@ function KDSContent() {
                           </span>
                         )}
                       </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold text-gray-900 truncate">
+                        {getCustomerName(order)}
+                      </div>
+                      {getTableNumber(order) && (
+                        <span className="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
+                          T-{getTableNumber(order)}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500 font-medium">
                       {new Date(order.created_at).toLocaleTimeString()}

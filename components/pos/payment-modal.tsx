@@ -216,7 +216,7 @@ export function PaymentModal({
       <Dialog open={isOpen} onOpenChange={onClose}>
           <DialogContent className="sm:max-w-100">
           {/* Printable Receipt - Hidden on screen, visible on print */}
-          <div className="block fixed -left-[2500px] top-0 z-[9999] bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
+          <div className="block fixed -left-625 top-0 z-9999 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
              {receiptData && (
                 <PrintableReceipt 
                     settings={receiptSettings}

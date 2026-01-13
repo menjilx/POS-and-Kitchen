@@ -274,7 +274,7 @@ export default function SaleDetailPage() {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {receiptSettings && (
-        <div className="block fixed -left-[2500px] top-0 z-[9999] bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
+        <div className="block fixed -left-625 top-0 z-9999 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
           <PrintableReceipt
             settings={receiptSettings}
             data={{
