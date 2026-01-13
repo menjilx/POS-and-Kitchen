@@ -7,11 +7,14 @@ import {
   Building2,
   Calendar,
   ChefHat,
+  CircleHelp,
   DollarSign,
   FileText,
   LayoutDashboard,
   MapPin,
   Package,
+  Search,
+  Settings,
   ShoppingBag,
   ShoppingCart,
   SlidersHorizontal,
@@ -19,7 +22,6 @@ import {
   Users,
 } from "lucide-react"
 
-import { NavUser } from "@/components/nav-user"
 import type { User as AppUser, UserRole } from "@/types/database"
 import {
   Sidebar,
@@ -32,8 +34,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "@/components/ui/sidebar"
+
+import { NavUser } from "@/components/nav-user"
 
 type NavItem = {
   title: string
@@ -251,6 +254,33 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
+          {user.role === "owner" ? (
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Settings">
+                <Link href="/dashboard/settings">
+                  <Settings />
+                  <span>Settings</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ) : null}
+
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Get Help">
+              <a href="mailto:support@kitchensystem.app">
+                <CircleHelp />
+                <span>Get Help</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <SidebarMenuButton tooltip="Search">
+              <Search />
+              <span>Search</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Kitchen Display">
               <Link href="/dashboard/settings?tab=kds">
@@ -260,9 +290,15 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <NavUser user={{ name: user.full_name || user.email || 'User', email: user.email, avatar: '' }} />
+
+        <NavUser
+          user={{
+            name: user.full_name || user.email.split("@")[0] || "User",
+            email: user.email,
+            avatar: "",
+          }}
+        />
       </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   )
 }

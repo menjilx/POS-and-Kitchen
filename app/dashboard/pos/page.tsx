@@ -42,6 +42,26 @@ type Discount = {
   is_active: boolean
 }
 
+type SaleReportItem = {
+  quantity: number | null
+}
+
+type SaleReportTable = {
+  table_number: string | number | null
+}
+
+type SaleReportRow = {
+  order_number: string
+  total_amount: number
+  payment_status: string
+  payment_method: string | null
+  sale_date: string
+  sale_time: string
+  notes: string | null
+  tables: SaleReportTable | SaleReportTable[] | null
+  sale_items: SaleReportItem[] | null
+}
+
 export default function POSPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -490,10 +510,12 @@ export default function POSPage() {
             return
         }
 
+        const rows = (data as unknown) as SaleReportRow[]
+
         const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Payment Method", "Status"]
         const csvContent = [
             headers.join(","),
-            ...data.map(s => {
+            ...rows.map((s) => {
                 let name = "Guest"
                 if (s.notes?.startsWith("Customer: ")) {
                     name = s.notes.replace("Customer: ", "")
@@ -501,8 +523,13 @@ export default function POSPage() {
                         name = name.split(" | Note: ")[0]
                     }
                 }
-                const itemsCount = s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0
-                const tableNum = Array.isArray(s.tables) ? s.tables[0]?.table_number : (s.tables as any)?.table_number
+
+                const itemsCount =
+                  s.sale_items?.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0) || 0
+                const tableRel = s.tables
+                const tableNum = Array.isArray(tableRel)
+                  ? tableRel[0]?.table_number
+                  : tableRel?.table_number
 
                 return [
                     s.order_number,

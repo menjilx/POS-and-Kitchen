@@ -3,10 +3,21 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabaseAdmin as supabase } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { Plus, Trash2 } from 'lucide-react'
-import { DataTable } from '@/components/data-table'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { DataTable } from '../../../../components/data-table'
 import { getColumns, Tenant } from './columns'
 import { useToast } from '@/hooks/use-toast'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 type TenantSettingsRow = {
   id: string
@@ -163,108 +174,111 @@ export default function AdminTenantsPage() {
           <h1 className="text-3xl font-bold">Tenants</h1>
           <p className="text-muted-foreground">Manage all restaurant accounts</p>
         </div>
-        <Link
-          href="/admin/tenants/new"
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-        >
-          <Plus size={16} />
-          <span>Add Tenant</span>
-        </Link>
+        <Button asChild>
+          <Link href="/admin/tenants/new">
+            <Plus className="h-4 w-4" />
+            Add Tenant
+          </Link>
+        </Button>
       </div>
 
       {loading ? (
         <div className="flex justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900"></div>
-        </div>
-      ) : (
-        <DataTable columns={columns} data={tenants} />
-      )}
-
-      {showSuspendModal && selectedTenant && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
-            <h2 className="text-xl font-bold mb-4">
-              {selectedTenant.is_suspended ? 'Reactivate Tenant' : 'Suspend Tenant'}
-            </h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              {selectedTenant.name} - {selectedTenant.email}
-            </p>
-            {selectedTenant.suspension_reason && (
-              <div className="p-3 bg-red-50 rounded-md mb-4">
-                <p className="text-sm">
-                  <span className="font-medium">Previous reason:</span> {selectedTenant.suspension_reason}
-                </p>
-              </div>
-            )}
-            {!selectedTenant.is_suspended && (
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Suspension Reason
-                </label>
-                <textarea
-                  value={suspendReason}
-                  onChange={(e) => setSuspendReason(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                  rows={3}
-                  placeholder="Reason for suspension..."
-                />
-              </div>
-            )}
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowSuspendModal(false)
-                  setSelectedTenant(null)
-                  setSuspendReason('')
-                }}
-                className="flex-1 px-4 py-2 border rounded-md hover:bg-accent"
-              >
-                Cancel
-              </button>
-              {!selectedTenant.is_suspended ? (
-                <button
-                  onClick={handleSuspend}
-                  disabled={!suspendReason}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
-                >
-                  Suspend
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleReactivate(selectedTenant.id)}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                >
-                  Reactivate
-                </button>
-              )}
-            </div>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            <span>Loading...</span>
           </div>
         </div>
+      ) : (
+        <DataTable<Tenant, unknown> columns={columns} data={tenants} />
       )}
 
-      {showDeleteModal && selectedTenant && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-lg border p-6 max-w-md w-full mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-red-100 p-2 rounded-full">
-                <Trash2 className="w-8 h-8 text-red-600" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-red-600">Delete Tenant</h2>
-                <p className="text-sm text-muted-foreground">
-                  {selectedTenant.name} - {selectedTenant.email}
-                </p>
-                {selectedTenant.user_count > 0 && (
-                  <p className="text-sm text-red-600 mt-2 font-medium">
-                    Warning: This will delete {selectedTenant.user_count} user accounts!
-                  </p>
-                )}
-              </div>
+      <Dialog
+        open={showSuspendModal && Boolean(selectedTenant)}
+        onOpenChange={(open) => {
+          setShowSuspendModal(open)
+          if (!open) {
+            setSelectedTenant(null)
+            setSuspendReason('')
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedTenant?.is_suspended ? 'Reactivate Tenant' : 'Suspend Tenant'}</DialogTitle>
+            <DialogDescription>
+              {selectedTenant ? `${selectedTenant.name} — ${selectedTenant.email}` : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedTenant?.suspension_reason ? (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm">
+              <span className="font-medium">Previous reason:</span> {selectedTenant.suspension_reason}
             </div>
-            <p className="text-sm text-red-700 mb-4">
-              This action is irreversible. All data including:
-            </p>
-            <ul className="text-sm text-muted-foreground mb-4 space-y-1">
+          ) : null}
+
+          {selectedTenant && !selectedTenant.is_suspended ? (
+            <div className="space-y-2">
+              <Label>Suspension Reason</Label>
+              <Textarea
+                value={suspendReason}
+                onChange={(e) => setSuspendReason(e.target.value)}
+                rows={3}
+                placeholder="Reason for suspension..."
+              />
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSuspendModal(false)
+                setSelectedTenant(null)
+                setSuspendReason('')
+              }}
+            >
+              Cancel
+            </Button>
+
+            {selectedTenant && !selectedTenant.is_suspended ? (
+              <Button variant="destructive" onClick={handleSuspend} disabled={!suspendReason}>
+                Suspend
+              </Button>
+            ) : selectedTenant ? (
+              <Button onClick={() => handleReactivate(selectedTenant.id)}>Reactivate</Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showDeleteModal && Boolean(selectedTenant)}
+        onOpenChange={(open) => {
+          setShowDeleteModal(open)
+          if (!open) setSelectedTenant(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Tenant
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTenant ? `${selectedTenant.name} — ${selectedTenant.email}` : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedTenant && selectedTenant.user_count > 0 ? (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              Warning: This will delete {selectedTenant.user_count} user accounts.
+            </div>
+          ) : null}
+
+          <div className="space-y-2 text-sm">
+            <p className="font-medium text-destructive">This action is irreversible.</p>
+            <ul className="text-muted-foreground space-y-1">
               <li>• All sales records</li>
               <li>• All inventory and stock</li>
               <li>• All menu items and recipes</li>
@@ -272,26 +286,24 @@ export default function AdminTenantsPage() {
               <li>• All reservations</li>
               <li>• All expenses</li>
             </ul>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowDeleteModal(false)
-                  setSelectedTenant(null)
-                }}
-                className="flex-1 px-4 py-2 border rounded-md hover:bg-accent"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-              >
-                Delete Permanently
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteModal(false)
+                setSelectedTenant(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              Delete Permanently
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

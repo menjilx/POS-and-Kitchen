@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, Fragment } from 'react'
-import { useRouter } from 'next/navigation'
-import { DataTable } from '@/components/data-table'
+import { DataTable } from '../../../components/data-table'
 import { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { MoreHorizontal, Plus, Shield, Users, Save, Loader2 } from 'lucide-react'
+import { MoreHorizontal, Plus, Shield, Users, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { inviteUser, updateUser, deleteUser } from '@/app/actions/users'
 import { updateRolePermissions } from '@/app/actions/permissions'
@@ -216,7 +215,7 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
       } else {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       }
-    } catch (e) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to send invitation', variant: 'destructive' })
     } finally {
       setLoading(false)
@@ -281,7 +280,7 @@ function EditUserDialog({ user, open, onOpenChange, currentUser }: { user: User;
       } else {
         toast({ title: 'Error', description: result.error, variant: 'destructive' })
       }
-    } catch (e) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to update user', variant: 'destructive' })
     } finally {
       setLoading(false)
@@ -364,7 +363,7 @@ function DeleteUserDialog({ user, open, onOpenChange }: { user: User; open: bool
             } else {
                 toast({ title: 'Error', description: result.error, variant: 'destructive' })
             }
-        } catch (e) {
+        } catch {
             toast({ title: 'Error', description: 'Failed to delete user', variant: 'destructive' })
         } finally {
             setLoading(false)
@@ -429,7 +428,7 @@ function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePer
       
       toast({ title: 'Permissions updated successfully', variant: 'default' })
       setHasChanges(false)
-    } catch (e) {
+    } catch {
       toast({ title: 'Error', description: 'Failed to update permissions', variant: 'destructive' })
     } finally {
       setLoading(false)

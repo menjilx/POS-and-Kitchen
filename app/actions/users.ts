@@ -96,7 +96,7 @@ export async function inviteUser(formData: FormData) {
 
 export async function deleteUser(userId: string) {
     try {
-        const { supabase, currentUser } = await checkOwner()
+        const { currentUser } = await checkOwner()
         
         if (userId === currentUser.id) {
             throw new Error('Cannot delete your own account')

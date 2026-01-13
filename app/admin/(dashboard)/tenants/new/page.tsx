@@ -24,7 +24,7 @@ export default function NewTenantPage() {
       if (!formData.name.trim()) throw new Error('Tenant name is required')
       if (!formData.email.trim()) throw new Error('Contact email is required')
 
-      const { data, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('tenants')
         .insert([
           {

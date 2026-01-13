@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,27 @@ export interface Transaction {
   tableNumber?: string
 }
 
+type SaleItemRow = {
+  quantity: number | null
+}
+
+type SaleTableRow = {
+  table_number: string | null
+}
+
+type SaleRow = {
+  id: string
+  order_number: string
+  total_amount: number
+  payment_status: string
+  payment_method: string | null
+  sale_date: string
+  sale_time: string
+  notes: string | null
+  sale_items: SaleItemRow[] | null
+  tables: SaleTableRow[] | SaleTableRow | null
+}
+
 interface TransactionsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -54,18 +75,10 @@ export function TransactionsModal({
   const [searchQuery, setSearchQuery] = useState("")
   const [processingId, setProcessingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isOpen && session) {
-      void fetchTransactions()
-    }
-  }, [isOpen, session])
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     if (!session) return
     setIsLoading(true)
     try {
-      // Fetch ALL sales for this session
-      // We filter by tenant_id, created_by (user), and created_at >= opening_time
       let query = supabase
         .from('sales')
         .select(`
@@ -95,7 +108,9 @@ export function TransactionsModal({
 
       if (error) throw error
 
-      const formatted: Transaction[] = data.map(s => {
+      const rows = (Array.isArray(data) ? data : []) as unknown as SaleRow[]
+
+      const formatted: Transaction[] = rows.map((s) => {
         let name = "Guest"
         if (s.notes?.startsWith("Customer: ")) {
             name = s.notes.replace("Customer: ", "")
@@ -103,6 +118,8 @@ export function TransactionsModal({
                 name = name.split(" | Note: ")[0]
             }
         }
+
+        const table = Array.isArray(s.tables) ? s.tables[0] : s.tables
 
         return {
           id: s.id,
@@ -113,10 +130,8 @@ export function TransactionsModal({
           paymentMethod: s.payment_method,
           date: new Date(s.sale_date).toLocaleDateString(),
           time: new Date(s.sale_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          itemsCount: s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          tableNumber: Array.isArray(s.tables) ? s.tables[0]?.table_number : (s.tables as any)?.table_number
+          itemsCount: (s.sale_items ?? []).reduce((acc, item) => acc + (item.quantity ?? 0), 0),
+          tableNumber: table?.table_number ?? undefined
         }
       })
 
@@ -127,7 +142,13 @@ export function TransactionsModal({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [session, toast])
+
+  useEffect(() => {
+    if (isOpen && session) {
+      void fetchTransactions()
+    }
+  }, [fetchTransactions, isOpen, session])
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -195,7 +216,7 @@ export function TransactionsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[800px]">
+      <DialogContent className="sm:max-w-200">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -219,7 +240,7 @@ export function TransactionsModal({
             className="pl-8"
           />
         </div>
-        <ScrollArea className="h-[400px] pr-4">
+        <ScrollArea className="h-100 pr-4">
           <div className="space-y-4">
             {isLoading ? (
                <div className="flex justify-center py-8">

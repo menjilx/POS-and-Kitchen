@@ -22,6 +22,13 @@ type Crumb = {
 }
 
 const routeTitles: Record<string, string> = {
+  "/admin": "Dashboard",
+  "/admin/profile": "My Profile",
+  "/admin/settings": "Settings",
+  "/admin/tenants": "Tenants",
+  "/admin/tenants/new": "New Tenant",
+  "/admin/users": "All Users",
+  "/admin/users/new": "New Super Admin",
   "/dashboard": "Dashboard",
   "/dashboard/pos": "POS",
   "/dashboard/sales": "Sales",
@@ -63,8 +70,32 @@ function titleFromSegment(segment: string) {
 }
 
 function buildCrumbs(pathname: string): { crumbs: Crumb[]; title: string } {
+  if (pathname.startsWith("/admin")) {
+    const segments = pathname.split("/").filter(Boolean)
+    const adminIndex = segments.indexOf("admin")
+    const subSegments = adminIndex === -1 ? [] : segments.slice(adminIndex + 1)
+
+    const crumbs: Crumb[] = [{ label: "Admin", href: "/admin" }]
+    let currentPath = "/admin"
+
+    subSegments.forEach((seg) => {
+      currentPath = `${currentPath}/${seg}`
+      const label = routeTitles[currentPath] ?? titleFromSegment(seg)
+      crumbs.push({ label, href: currentPath })
+    })
+
+    const last = crumbs.at(-1)
+    if (last) last.current = true
+
+    const title = last?.label ?? "Admin"
+    return { crumbs, title }
+  }
+
   if (!pathname.startsWith("/dashboard")) {
-    return { crumbs: [{ label: "Dashboard", href: "/dashboard", current: true }], title: "Dashboard" }
+    return {
+      crumbs: [{ label: "Dashboard", href: "/dashboard", current: true }],
+      title: "Dashboard",
+    }
   }
 
   const segments = pathname.split("/").filter(Boolean)
@@ -89,7 +120,6 @@ function buildCrumbs(pathname: string): { crumbs: Crumb[]; title: string } {
 
 export function SiteHeader() {
   const pathname = usePathname()
-
   const { crumbs, title } = useMemo(() => buildCrumbs(pathname), [pathname])
 
   return (
@@ -118,8 +148,7 @@ export function SiteHeader() {
             })}
           </BreadcrumbList>
         </Breadcrumb>
-
-        <div className="ml-auto text-sm font-medium text-foreground truncate">{title}</div>
+        <div className="ml-auto truncate text-sm font-medium text-foreground">{title}</div>
       </div>
     </header>
   )

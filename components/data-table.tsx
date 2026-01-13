@@ -3,12 +3,16 @@
 import * as React from "react"
 import {
   ColumnDef,
+  SortingState,
   flexRender,
   getCoreRowModel,
   getPaginationRowModel,
+  getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table"
+import { ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react"
 
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -17,9 +21,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
-interface DataTableProps<TData, TValue> {
+type DataTableProps<TData, TValue> = {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   getRowClassName?: (row: TData) => string
@@ -30,43 +34,71 @@ export function DataTable<TData, TValue>({
   data,
   getRowClassName,
 }: DataTableProps<TData, TValue>) {
-  // eslint-disable-next-line react-hooks/incompatible-library
+  const [sorting, setSorting] = React.useState<SortingState>([])
+
   const table = useReactTable({
     data,
     columns,
+    state: {
+      sorting,
+    },
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   })
 
   return (
-    <div>
+    <div className="space-y-4">
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
+                  const canSort = header.column.getCanSort()
+                  const sortDir = header.column.getIsSorted()
+                  const headerContent = header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())
+                  const headerElement = React.isValidElement<{ className?: string }>(headerContent)
+                    ? headerContent
+                    : null
+                  const isRightAligned =
+                    typeof headerElement?.props?.className === "string" &&
+                    headerElement.props.className.includes("text-right")
+
                   return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
+                    <TableHead
+                      key={header.id}
+                      className={cn(canSort && "cursor-pointer select-none")}
+                      onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
+                    >
+                      <div className={cn("flex items-center gap-1", isRightAligned && "justify-end")}>
+                        {headerContent}
+                        {canSort ? (
+                          <ArrowUpDown
+                            className={cn(
+                              "h-4 w-4 text-muted-foreground",
+                              sortDir ? "text-foreground" : ""
+                            )}
+                          />
+                        ) : null}
+                      </div>
                     </TableHead>
                   )
                 })}
               </TableRow>
             ))}
           </TableHeader>
+
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={getRowClassName ? getRowClassName(row.original) : undefined}
+                  className={cn(getRowClassName?.(row.original))}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -85,14 +117,16 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
+
+      <div className="flex items-center justify-end gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
         >
-          Previous
+          <ChevronLeft className="h-4 w-4" />
+          Prev
         </Button>
         <Button
           variant="outline"
@@ -101,6 +135,7 @@ export function DataTable<TData, TValue>({
           disabled={!table.getCanNextPage()}
         >
           Next
+          <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>

@@ -59,7 +59,7 @@ async function updateSuperAdmin() {
 
     if (existingUser) {
         console.log('User exists. Updating...')
-        const { data, error } = await supabase.auth.admin.updateUserById(existingUser.id, {
+        const { error } = await supabase.auth.admin.updateUserById(existingUser.id, {
             password: newSuperAdmin.password,
             email_confirm: true,
             user_metadata: {

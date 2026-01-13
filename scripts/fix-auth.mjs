@@ -55,6 +55,8 @@ async function cleanup() {
       .select('*')
       .eq('id', validUser.id)
       .single()
+
+    if (profileError) throw profileError
     
     if (profile) {
         if (profile.role !== 'superadmin') {
