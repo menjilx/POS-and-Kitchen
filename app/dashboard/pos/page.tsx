@@ -828,7 +828,8 @@ export default function POSPage() {
           console.warn("KDS Order not found for sale", saleId)
       } 
       
-      return saleId
+      if (!saleId) throw new Error('Failed to save sale')
+      return { saleId, orderNumber }
   }
   
   const handlePaymentComplete = async (method: string, receivedAmount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => {
@@ -840,7 +841,7 @@ export default function POSPage() {
             receivedAmount: isHouseAccount ? undefined : receivedAmount,
           } satisfies PaymentAdditionalData
 
-          await saveOrder(status, method, undefined, mergedAdditionalData)
+          const result = await saveOrder(status, method, undefined, mergedAdditionalData)
           
           toast({
               title: "Payment Successful",
@@ -851,9 +852,12 @@ export default function POSPage() {
           
           clearCart()
           loadData()
+
+          return result
       } catch (err) {
           console.error(err)
           toast({ title: "Error", description: "Failed to process payment", variant: "destructive" })
+          throw err
       } finally {
           setIsProcessing(false)
       }

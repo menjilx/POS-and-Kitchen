@@ -16,14 +16,19 @@ import { User, X, Receipt, Printer, Download, Paperclip } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { PrintableReceipt } from "@/components/receipt/printable-receipt"
+import { buildReceiptText, normalizeReceiptSettings, PrintableReceipt, type ReceiptData } from "@/components/receipt/printable-receipt"
 import { supabase } from "@/lib/supabase/client"
 import { PaymentAdditionalData } from "@/types/database"
 
 interface PaymentModalProps {
   isOpen: boolean
   onClose: () => void
-  onPaymentComplete: (method: string, amount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => Promise<void>
+  onPaymentComplete: (
+    method: string,
+    amount: number,
+    isHouseAccount: boolean,
+    additionalData?: PaymentAdditionalData
+  ) => Promise<{ saleId: string; orderNumber: string }>
   totalAmount: number
   customerName: string
   orderNumber: string
@@ -56,6 +61,8 @@ export function PaymentModal({
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
   const [cashierName, setCashierName] = useState<string>("")
   const [isFirstInput, setIsFirstInput] = useState(true)
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
+  const [printingReceipt, setPrintingReceipt] = useState(false)
 
   // Card Support Info
   const [cardRef, setCardRef] = useState("")
@@ -74,8 +81,15 @@ export function PaymentModal({
     fetchUser()
   }, [])
 
-  // Calculate change dynamically based on received amount and total
-  const change = Math.max(0, (parseFloat(receivedAmount) || 0) - totalAmount)
+  useEffect(() => {
+    if (!printingReceipt) return
+    const handleAfterPrint = () => setPrintingReceipt(false)
+    window.addEventListener('afterprint', handleAfterPrint)
+    window.setTimeout(() => window.print(), 0)
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint)
+    }
+  }, [printingReceipt])
 
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
@@ -83,12 +97,17 @@ export function PaymentModal({
       setReceivedAmount(totalAmount.toString())
       setPaymentMethod("cash")
       setShowReceipt(false)
+      setReceiptData(null)
+      setPrintingReceipt(false)
       setIsFirstInput(true)
       setCardRef("")
       setCardNotes("")
       setAttachmentName(null)
     }
   }
+
+  // Calculate change dynamically based on received amount and total
+  const change = Math.max(0, (parseFloat(receivedAmount) || 0) - totalAmount)
 
   const handleNumPadClick = (value: string) => {
     if (isFirstInput) {
@@ -133,12 +152,37 @@ export function PaymentModal({
     // However, the user wants to "show some field". 
     // I will implement the UI fields now. 
     
-    await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account', {
+    const snapshot: ReceiptData = {
+      items: items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      subtotal,
+      tax,
+      discount,
+      total: totalAmount,
+      cashierName: cashierName || 'Cashier',
+      customerName,
+      orderNumber,
+      date: new Date().toLocaleString(),
+      paymentMethod,
+      receivedAmount: paymentMethod === 'cash' ? amount : undefined,
+      changeAmount: paymentMethod === 'cash' ? change : undefined,
+      currency,
+    }
+
+    const { orderNumber: resolvedOrderNumber } = await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account', {
       ref: cardRef,
       notes: cardNotes,
       attachment: attachmentName,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
+    })
+
+    setReceiptData({
+      ...snapshot,
+      orderNumber: resolvedOrderNumber || snapshot.orderNumber,
     })
 
     const showReceiptAfterPayment = tenantSettings.receipt?.showReceiptAfterPayment ?? true
@@ -150,8 +194,21 @@ export function PaymentModal({
     }
   }
 
-  const handlePrintReceipt = () => {
-    window.print()
+  const receiptSettings = normalizeReceiptSettings(tenantSettings.receipt)
+
+  const handleDownloadReceipt = () => {
+    if (!receiptData) return
+    const content = buildReceiptText(receiptSettings, receiptData)
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    const safeOrder = (receiptData.orderNumber || 'receipt').replace(/[^a-z0-9]+/gi, '_')
+    link.setAttribute('download', `${safeOrder}.txt`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   if (showReceipt) {
@@ -159,25 +216,11 @@ export function PaymentModal({
       <Dialog open={isOpen} onOpenChange={onClose}>
           <DialogContent className="sm:max-w-100">
           {/* Printable Receipt - Hidden on screen, visible on print */}
-          <div className="block fixed -left-2500 top-0 z-9999 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
-             {tenantSettings.receipt && (
+          <div className="block fixed -left-[2500px] top-0 z-[9999] bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
+             {receiptData && (
                 <PrintableReceipt 
-                    settings={tenantSettings.receipt}
-                    data={{
-                        items,
-                        subtotal,
-                        tax,
-                        discount,
-                        total: totalAmount,
-                        cashierName: cashierName || 'Cashier', 
-                        customerName,
-                        orderNumber,
-                        date: new Date().toLocaleString(),
-                        paymentMethod,
-                        receivedAmount: paymentMethod === 'cash' ? (parseFloat(receivedAmount) || 0) : undefined,
-                        changeAmount: paymentMethod === 'cash' ? change : undefined,
-                        currency
-                    }}
+                    settings={receiptSettings}
+                    data={receiptData}
                 />
              )}
           </div>
@@ -192,17 +235,17 @@ export function PaymentModal({
             <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 mb-2">
                 <Receipt className="h-8 w-8" />
             </div>
-            <h3 className="text-xl font-bold">Change: {formatCurrency(change, currency)}</h3>
+            <h3 className="text-xl font-bold">Change: {formatCurrency(receiptData?.changeAmount ?? 0, currency)}</h3>
             <p className="text-muted-foreground text-center">
-                Payment for Order {orderNumber} has been recorded.
+                Payment for Order {receiptData?.orderNumber || orderNumber} has been recorded.
             </p>
 
             <div className="flex gap-3 w-full mt-4">
-                <Button className="flex-1" variant="outline" onClick={handlePrintReceipt}>
+                <Button className="flex-1" variant="outline" onClick={() => setPrintingReceipt(true)} disabled={!receiptData}>
                     <Printer className="mr-2 h-4 w-4" /> Print
                 </Button>
-                <Button className="flex-1" variant="outline" onClick={handlePrintReceipt}>
-                    <Download className="mr-2 h-4 w-4" /> PDF
+                <Button className="flex-1" variant="outline" onClick={handleDownloadReceipt} disabled={!receiptData}>
+                    <Download className="mr-2 h-4 w-4" /> Download
                 </Button>
             </div>
             

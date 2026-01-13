@@ -20,6 +20,30 @@ export interface ReceiptSettings {
   showQrCode: boolean
 }
 
+export const defaultReceiptSettings: ReceiptSettings = {
+  showLogo: false,
+  headerText: 'SHOP NAME',
+  address: 'Address: Lorem Ipsum, 23-10\nTelp. 11223344',
+  phoneNumber: '11223344',
+  footerText: 'THANK YOU!',
+  showCashier: true,
+  showOrderNumber: true,
+  showDate: true,
+  showCustomerName: true,
+  showTax: true,
+  showDiscount: true,
+  showChange: true,
+  showReceiptAfterPayment: true,
+  showQrCode: true,
+}
+
+export function normalizeReceiptSettings(settings?: Partial<ReceiptSettings> | null): ReceiptSettings {
+  return {
+    ...defaultReceiptSettings,
+    ...(settings ?? {}),
+  }
+}
+
 export interface ReceiptData {
   items: { name: string; quantity: number; price: number }[]
   subtotal: number
@@ -38,6 +62,76 @@ export interface ReceiptData {
   receivedAmount?: number
   changeAmount?: number
   currency?: string
+}
+
+export function buildReceiptText(settings: ReceiptSettings, data: ReceiptData) {
+  const lines: string[] = []
+
+  const formatMoney = (price: number) => {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: data.currency || 'USD',
+      }).format(price)
+    } catch {
+      return `${data.currency || '$'}${price.toFixed(2)}`
+    }
+  }
+
+  const add = (value?: string) => {
+    if (!value) return
+    lines.push(value)
+  }
+
+  add((settings.headerText || '').toUpperCase())
+  if (settings.address) {
+    settings.address.split('\n').forEach((l) => add(l))
+  }
+  if (settings.phoneNumber) {
+    add(`Tel. ${settings.phoneNumber}`)
+  }
+
+  add('')
+  add('********************************')
+  add('CASH RECEIPT')
+  add('********************************')
+  add('')
+
+  if (settings.showDate) add(`Date: ${data.date}`)
+  if (settings.showOrderNumber) add(`Order #: ${data.orderNumber}`)
+  if (settings.showCashier) add(`Cashier: ${data.cashierName || 'N/A'}`)
+  if (settings.showCustomerName) add(`Customer: ${data.customerName || 'Walk-in'}`)
+  add('')
+  add('Description')
+
+  data.items.forEach((item) => {
+    const label = `${item.name}${item.quantity > 1 ? ` x ${item.quantity}` : ''}`
+    add(`${label}  ${formatMoney(item.price * item.quantity)}`)
+  })
+
+  add('')
+  add('********************************')
+  add(`Total: ${formatMoney(data.total)}`)
+  add(`Subtotal: ${formatMoney(data.subtotal)}`)
+  if (settings.showTax) add(`Tax: ${formatMoney(data.tax)}`)
+  if (settings.showDiscount && data.discount > 0) {
+    const suffix = data.discountName ? ` (${data.discountName})` : ''
+    add(`Discount${suffix}: -${formatMoney(data.discount)}`)
+  }
+  add('')
+  add('********************************')
+  if (data.paymentStatus) add(`Payment Status: ${data.paymentStatus.toUpperCase()}`)
+  if (data.paymentMethod) add(`Payment Method: ${data.paymentMethod.toUpperCase()}`)
+  if (settings.showChange && typeof data.receivedAmount === 'number') add(`Received: ${formatMoney(data.receivedAmount)}`)
+  if (settings.showChange && typeof data.changeAmount === 'number' && data.changeAmount > 0) add(`Change: ${formatMoney(data.changeAmount)}`)
+  if (data.paymentRef) add(`Ref: ${data.paymentRef}`)
+  if (data.paymentNotes) add(`Notes: ${data.paymentNotes}`)
+  add('')
+  if (settings.footerText) {
+    settings.footerText.split('\n').forEach((l) => add(l.toUpperCase()))
+  }
+
+  return lines.join('\n')
 }
 
 interface PrintableReceiptProps {

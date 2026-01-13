@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { PrintableReceipt, type ReceiptSettings } from '@/components/receipt/printable-receipt'
+import { normalizeReceiptSettings, PrintableReceipt, type ReceiptSettings } from '@/components/receipt/printable-receipt'
 
 type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded'
 type KdsOrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled'
@@ -109,9 +109,9 @@ export default function SaleDetailPage() {
         .eq('id', userData.tenant_id)
         .single()
       
-      const settings = tenantData?.settings as { currency?: string; receipt?: ReceiptSettings }
+      const settings = tenantData?.settings as { currency?: string; receipt?: Partial<ReceiptSettings> } | null
       if (settings?.currency) setCurrency(settings.currency)
-      if (settings?.receipt) setReceiptSettings(settings.receipt)
+      setReceiptSettings(normalizeReceiptSettings(settings?.receipt))
 
       // Fetch Sale
       const { data: saleData, error } = await supabase
@@ -274,7 +274,7 @@ export default function SaleDetailPage() {
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
       {receiptSettings && (
-        <div className="block fixed -left-2500 top-0 z-50 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
+        <div className="block fixed -left-[2500px] top-0 z-[9999] bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
           <PrintableReceipt
             settings={receiptSettings}
             data={{
