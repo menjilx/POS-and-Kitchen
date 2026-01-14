@@ -6,6 +6,7 @@ import { MenuItem } from "@/types/database"
 import { Plus, Minus, Image as ImageIcon } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import NextImage from "next/image"
+import { useMemo } from "react"
 
 interface ProductCardProps {
   item: MenuItem
@@ -17,12 +18,28 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", priority = false }: ProductCardProps) {
+  const imageSrc = useMemo(() => {
+    const raw = item.image_url?.trim()
+    if (!raw) return null
+    if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!supabaseUrl) return raw.startsWith("/") ? raw : `/${raw}`
+
+    if (raw.startsWith("/storage/")) return `${supabaseUrl}${raw}`
+    if (raw.startsWith("storage/")) return `${supabaseUrl}/${raw}`
+    if (raw.startsWith("menu-images/")) return `${supabaseUrl}/storage/v1/object/public/${raw}`
+
+    const cleaned = raw.replace(/^\/+/, "")
+    return `${supabaseUrl}/storage/v1/object/public/menu-images/${cleaned}`
+  }, [item.image_url])
+
   return (
     <Card className={`overflow-hidden transition-all hover:shadow-md ${quantity > 0 ? "ring-2 ring-primary" : ""}`}>
       <div className="aspect-4/3 bg-muted relative flex items-center justify-center">
-        {item.image_url ? (
+        {imageSrc ? (
           <NextImage 
-            src={item.image_url} 
+            src={imageSrc} 
             alt={item.name} 
             fill
             className="object-cover"
