@@ -13,8 +13,6 @@ import {
   LayoutDashboard,
   MapPin,
   Package,
-  Search,
-  Settings,
   ShoppingBag,
   ShoppingCart,
   SlidersHorizontal,
@@ -254,30 +252,12 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu>
-          {user.role === "owner" ? (
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Settings">
-                <Link href="/dashboard/settings">
-                  <Settings />
-                  <span>Settings</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ) : null}
-
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Get Help">
               <a href="mailto:support@kitchensystem.app">
                 <CircleHelp />
                 <span>Get Help</span>
               </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Search">
-              <Search />
-              <span>Search</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
 
