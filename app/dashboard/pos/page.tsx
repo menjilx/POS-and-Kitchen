@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo, useCallback } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 import { Search, Clock, LogOut, X, List } from "lucide-react"
@@ -9,6 +9,8 @@ import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { OrderQueue } from "@/components/pos/order-queue"
 import { CategoryFilter } from "@/components/pos/category-filter"
 import { ProductGrid } from "@/components/pos/product-grid"
@@ -65,6 +67,115 @@ type SaleReportRow = {
   sale_items: SaleReportItem[] | null
 }
 
+function OrderQueueSkeleton() {
+  return (
+    <div className="w-full mb-6 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-7 w-36" />
+          <Skeleton className="h-5 w-12 rounded-full" />
+          <Skeleton className="h-5 w-[72px] rounded-full" />
+        </div>
+        <Skeleton className="h-9 w-64" />
+      </div>
+      <div className="flex overflow-x-auto gap-4 pb-2 -mx-1 px-1">
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <Card key={idx} className="min-w-50 w-50 shrink-0 overflow-hidden border-2 shadow-sm">
+            <CardContent className="p-0">
+              <Skeleton className="h-7 w-full rounded-none" />
+              <div className="p-3 space-y-2">
+                <div className="flex justify-between items-center gap-3">
+                  <Skeleton className="h-5 w-[104px]" />
+                  <Skeleton className="h-5 w-12 rounded-full" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-3 w-3 rounded-sm" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+                <div className="pt-1 flex flex-wrap gap-1">
+                  <Skeleton className="h-5 w-[88px] rounded-full" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CategoryFilterSkeleton() {
+  return (
+    <div className="mb-6">
+      <Skeleton className="h-6 w-28 mb-3" />
+      <div className="flex gap-3 overflow-x-auto pb-2">
+        {Array.from({ length: 6 }).map((_, idx) => (
+          <div
+            key={idx}
+            className="flex flex-col items-center justify-center h-auto py-3 px-4 min-w-24 gap-2 rounded-xl border bg-background"
+          >
+            <Skeleton className="h-6 w-6 rounded-md" />
+            <Skeleton className="h-4 w-14" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProductGridSkeleton() {
+  return (
+    <div>
+      <Skeleton className="h-6 w-[120px] mb-4" />
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, idx) => (
+          <Card key={idx} className="overflow-hidden">
+            <Skeleton className="aspect-4/3 w-full rounded-none" />
+            <CardContent className="p-4">
+              <Skeleton className="h-4 w-3/4 mb-2" />
+              <Skeleton className="h-6 w-24 mb-3" />
+              <Skeleton className="h-9 w-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OrderSidebarSkeleton() {
+  return (
+    <div className="h-full flex flex-col bg-card border-l">
+      <div className="p-4 border-b">
+        <Skeleton className="h-6 w-32 mb-3" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-6 w-6 rounded-md" />
+        </div>
+      </div>
+      <div className="p-4 space-y-4 overflow-hidden">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <div className="space-y-3 pt-2">
+          <Skeleton className="h-5 w-[88px]" />
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-3">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-[72px]" />
+            </div>
+          ))}
+        </div>
+        <div className="pt-4 grid grid-cols-2 gap-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+        <Skeleton className="h-11 w-full" />
+      </div>
+    </div>
+  )
+}
+
 export default function POSPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -114,8 +225,12 @@ export default function POSPage() {
   const [activeSaleId, setActiveSaleId] = useState<string | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [kitchenDisplays, setKitchenDisplays] = useState<{ id: string, name: string }[]>([])
+  const [isPosDataLoading, setIsPosDataLoading] = useState(true)
+  const hasLoadedOnceRef = useRef(false)
 
   const loadData = useCallback(async () => {
+    const showSkeleton = !hasLoadedOnceRef.current
+    if (showSkeleton) setIsPosDataLoading(true)
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       if (authError) throw authError
@@ -375,6 +490,9 @@ export default function POSPage() {
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       })
+    } finally {
+      hasLoadedOnceRef.current = true
+      if (showSkeleton) setIsPosDataLoading(false)
     }
   }, [toast])
 
@@ -1171,43 +1289,57 @@ export default function POSPage() {
         </div>
 
         {/* Order Queue */}
-        <OrderQueue 
-            orders={activeOrders} 
-            kitchenDisplays={kitchenDisplays} 
+        {isPosDataLoading ? (
+          <OrderQueueSkeleton />
+        ) : (
+          <OrderQueue
+            orders={activeOrders}
+            kitchenDisplays={kitchenDisplays}
             onOrderClick={(order) => setSelectedOrderDetails(order)}
-        />
+          />
+        )}
 
         {/* Main Content Scroll Area */}
         <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
             {/* Categories */}
-            <CategoryFilter 
-                categories={categories} 
+            {isPosDataLoading ? (
+              <CategoryFilterSkeleton />
+            ) : (
+              <CategoryFilter
+                categories={categories}
                 selectedCategory={selectedCategory}
                 onSelect={setSelectedCategory}
-            />
+              />
+            )}
 
             {/* Product Grid */}
-            <ProductGrid 
+            {isPosDataLoading ? (
+              <ProductGridSkeleton />
+            ) : (
+              <ProductGrid
                 items={filteredItems}
                 cart={cartItems.reduce((acc, curr) => ({ ...acc, [curr.item.id]: curr.quantity }), {})}
                 onAdd={addToCart}
                 onRemove={(item) => {
-                    // Logic to decrease or remove
-                    const existing = cartItems.find(i => i.item.id === item.id)
-                    if (existing && existing.quantity > 1) {
-                         updateQuantity(item.id, -1)
-                    } else {
-                        removeFromCart(item.id)
-                    }
+                  const existing = cartItems.find(i => i.item.id === item.id)
+                  if (existing && existing.quantity > 1) {
+                    updateQuantity(item.id, -1)
+                  } else {
+                    removeFromCart(item.id)
+                  }
                 }}
                 currency={currencySymbol}
-            />
+              />
+            )}
         </div>
       </div>
 
       {/* Right Sidebar */}
       <div className="w-100 shrink-0 flex-col border-l bg-background hidden lg:flex">
-        <OrderSidebar 
+        {isPosDataLoading || !currentOrderId ? (
+          <OrderSidebarSkeleton />
+        ) : (
+          <OrderSidebar
             orderId={currentOrderId}
             orderType={orderType}
             setOrderType={setOrderType}
@@ -1241,6 +1373,7 @@ export default function POSPage() {
             onSendToKitchen={handleSendToKitchen}
             kitchenDisplays={kitchenDisplays}
           />
+        )}
       </div>
 
       <RegisterModal 

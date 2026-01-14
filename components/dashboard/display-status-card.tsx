@@ -110,7 +110,9 @@ export function DisplayStatusCard({
                     <td className="py-3 text-right">
                       {row.openHref ? (
                         <Button asChild variant="outline" size="sm">
-                          <Link href={row.openHref}>Open</Link>
+                          <Link href={row.openHref} target="_blank" rel="noopener noreferrer">
+                            Open
+                          </Link>
                         </Button>
                       ) : (
                         <span className="text-muted-foreground">—</span>
