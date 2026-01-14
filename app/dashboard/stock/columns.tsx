@@ -13,6 +13,7 @@ export type StockWithIngredient = Stock & {
     reorder_level: number | null
     ingredient_categories: { name: string } | null
   } | null
+  simple_item_name?: string
 }
 
 export const getColumns = (
@@ -21,8 +22,17 @@ export const getColumns = (
 ): ColumnDef<StockWithIngredient>[] => [
   {
     accessorKey: "ingredients.name",
-    header: "Ingredient",
-    cell: ({ row }) => <span className="font-medium">{row.original.ingredients?.name}</span>,
+    header: "Stock Item",
+    cell: ({ row }) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{row.original.ingredients?.name}</span>
+        {row.original.simple_item_name && (
+          <Badge variant="secondary" className="w-fit text-[10px] px-1 py-0 h-5 mt-1 bg-blue-100 text-blue-700 hover:bg-blue-100">
+            {row.original.simple_item_name}
+          </Badge>
+        )}
+      </div>
+    ),
   },
   {
     accessorKey: "ingredients.ingredient_categories.name",

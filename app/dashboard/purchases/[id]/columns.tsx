@@ -12,7 +12,7 @@ export type PurchaseItemWithDetails = PurchaseItem & {
 export const getColumns = (currency: string): ColumnDef<PurchaseItemWithDetails>[] => [
   {
     accessorKey: "ingredients.name",
-    header: "Ingredient",
+    header: "Stock Item",
     cell: ({ row }) => {
       const name = row.original.ingredients?.name
       const unit = row.original.ingredients?.unit

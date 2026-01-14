@@ -27,7 +27,7 @@ export default async function SalesPage() {
       .select('*, kds_orders(status, started_at, completed_at)')
       .eq('tenant_id', userData.tenant_id)
       .order('sale_time', { ascending: false })
-      .limit(50),
+      .limit(1000),
     supabase
       .from('tenants')
       .select('settings')

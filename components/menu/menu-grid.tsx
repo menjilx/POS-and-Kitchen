@@ -85,7 +85,7 @@ export function MenuGrid({ items, currency }: MenuGridProps) {
 
       {viewMode === "grid" ? (
         <div className={`grid gap-4 ${getGridCols()}`}>
-          {items.map((item) => {
+          {items.map((item, index) => {
             const margin = Number(item.contribution_margin)
             const marginPercent = Number(item.selling_price) > 0
               ? (margin / Number(item.selling_price)) * 100
@@ -103,6 +103,8 @@ export function MenuGrid({ items, currency }: MenuGridProps) {
                       alt={item.name}
                       fill
                       className="object-cover"
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      priority={index < 4}
                     />
                   </div>
                 )}

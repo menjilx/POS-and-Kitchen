@@ -58,6 +58,7 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
   const [locations, setLocations] = useState<Location[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [existingAttachments, setExistingAttachments] = useState<PurchaseAttachment[]>([])
+  const [simpleItems, setSimpleItems] = useState<{ id: string, name: string, ingredient_id: string }[]>([])
 
   const loadData = useCallback(async () => {
     try {
@@ -75,7 +76,7 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
       }
 
       // Fetch master data
-      const [ingredientsRes, suppliersRes, locationsRes] = await Promise.all([
+      const [ingredientsRes, suppliersRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
         supabase
           .from('ingredients')
           .select('*')
@@ -92,12 +93,48 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
           .select('*')
           .eq('tenant_id', userData.tenant_id)
           .order('name'),
+        supabase
+          .from('menu_items')
+          .select('id, name, stock_ingredient_id')
+          .eq('tenant_id', userData.tenant_id)
+          .eq('item_type', 'simple')
+          .order('name'),
       ])
 
       const ingredientsData = ((ingredientsRes.data ?? []) as unknown) as Ingredient[]
       setIngredients(ingredientsData)
       setSuppliers(((suppliersRes.data ?? []) as unknown) as Supplier[])
       setLocations(((locationsRes.data ?? []) as unknown) as Location[])
+
+      const simpleMenuItems = (simpleMenuItemsRes.data ?? []) as Array<{ id: string; name: string; stock_ingredient_id: string | null }>
+      if (simpleMenuItems.length > 0) {
+        const missingStockLinks = simpleMenuItems.filter((i) => !i.stock_ingredient_id)
+        const recipeByMenuItemId = new Map<string, string>()
+        if (missingStockLinks.length > 0) {
+          const { data: recipeItemsData } = await supabase
+            .from('recipe_items')
+            .select('menu_item_id, ingredient_id')
+            .in('menu_item_id', missingStockLinks.map((i) => i.id))
+
+          ;(recipeItemsData ?? []).forEach((row: { menu_item_id: string; ingredient_id: string }) => {
+            if (!recipeByMenuItemId.has(row.menu_item_id)) {
+              recipeByMenuItemId.set(row.menu_item_id, row.ingredient_id)
+            }
+          })
+        }
+
+        setSimpleItems(
+          simpleMenuItems
+            .map((item) => ({
+              id: item.id,
+              name: item.name,
+              ingredient_id: item.stock_ingredient_id ?? recipeByMenuItemId.get(item.id) ?? '',
+            }))
+            .filter((item) => item.ingredient_id)
+        )
+      } else {
+        setSimpleItems([])
+      }
 
       // Fetch purchase data
       const { data: purchase, error: purchaseError } = await supabase
@@ -191,11 +228,23 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
   ) => {
     const updated = [...purchaseItems]
     if (field === 'ingredient_id') {
-      const ingredient = ingredients.find((i) => i.id === value)
+      let ingredientId = value
+      let displayName = ''
+
+      if (value.startsWith('item_')) {
+        const simpleItemId = value.replace('item_', '')
+        const simpleItem = simpleItems.find(i => i.id === simpleItemId)
+        if (simpleItem) {
+          ingredientId = simpleItem.ingredient_id
+          displayName = simpleItem.name
+        }
+      }
+
+      const ingredient = ingredients.find((i) => i.id === ingredientId)
       updated[index] = {
         ...updated[index],
-        [field]: value,
-        ingredient_name: ingredient?.name || '',
+        ingredient_id: ingredientId,
+        ingredient_name: displayName || ingredient?.name || '',
         unit: ingredient?.unit || '',
         current_cost: Number(ingredient?.cost_per_unit) || 0,
         unit_price: Number(ingredient?.cost_per_unit) || 0,
@@ -529,17 +578,38 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
                 <div key={index} className="border p-4 rounded-md">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Ingredient</label>
+                      <label className="block text-sm font-medium mb-1">Product</label>
                       <select
-                        value={item.ingredient_id}
+                        value={
+                          simpleItems.find(si => si.ingredient_id === item.ingredient_id && si.name === item.ingredient_name) 
+                            ? `item_${simpleItems.find(si => si.ingredient_id === item.ingredient_id && si.name === item.ingredient_name)?.id}`
+                            : item.ingredient_id
+                        }
                         onChange={(e) => updatePurchaseItem(index, 'ingredient_id', e.target.value)}
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                       >
-                        {ingredients.map((ing) => (
-                          <option key={ing.id} value={ing.id}>
-                            {ing.name} (Current: {formatCurrency(Number(ing.cost_per_unit))}/{ing.unit})
-                          </option>
-                        ))}
+                        <option value="">Select product</option>
+
+                        {simpleItems.length > 0 && (
+                          <optgroup label="Simple Items">
+                            {simpleItems.map((si) => {
+                              const ing = ingredients.find(i => i.id === si.ingredient_id)
+                              return (
+                                <option key={si.id} value={`item_${si.id}`}>
+                                  {si.name} {ing ? `(Current: ${formatCurrency(Number(ing.cost_per_unit))}/${ing.unit})` : ''}
+                                </option>
+                              )
+                            })}
+                          </optgroup>
+                        )}
+
+                        <optgroup label="Stock Items">
+                          {ingredients.map((ing) => (
+                            <option key={ing.id} value={ing.id}>
+                              {ing.name} (Current: {formatCurrency(Number(ing.cost_per_unit))}/{ing.unit})
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </div>
 

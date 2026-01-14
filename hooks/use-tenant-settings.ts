@@ -7,6 +7,9 @@ export type TenantSettings = {
   currency: string
   timezone: string
   tax_rate: number
+  features?: {
+    menu?: boolean
+  }
   receipt?: {
     showLogo: boolean
     logoUrl?: string
@@ -39,6 +42,9 @@ const defaultSettings: TenantSettings = {
   currency: 'USD',
   timezone: 'UTC',
   tax_rate: 0,
+  features: {
+    menu: true,
+  },
   receipt: {
     showLogo: false,
     headerText: 'SHOP NAME',
@@ -97,9 +103,13 @@ export function useTenantSettings(): UseTenantSettingsResult {
         const mergedReceipt = next.receipt
           ? { ...defaultSettings.receipt, ...next.receipt }
           : defaultSettings.receipt
+        const mergedFeatures = next.features
+          ? { ...defaultSettings.features, ...next.features }
+          : defaultSettings.features
         setSettings({
           ...defaultSettings,
           ...next,
+          features: mergedFeatures,
           receipt: mergedReceipt,
         })
       } else {

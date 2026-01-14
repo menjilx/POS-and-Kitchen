@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { MenuGrid } from '@/components/menu/menu-grid'
 
-export default async function MenuPage() {
+export default async function ItemsPage() {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -28,7 +28,7 @@ export default async function MenuPage() {
       .from('menu_items')
       .select('*')
       .eq('tenant_id', userData.tenant_id)
-      .eq('item_type', 'standard')
+      .eq('item_type', 'simple')
       .order('name'),
     supabase
       .from('tenants')
@@ -48,19 +48,13 @@ export default async function MenuPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Menu</h1>
+        <h1 className="text-3xl font-bold">Simple Items</h1>
         <div className="flex gap-4">
           <Link
-            href="/dashboard/menu/categories"
-            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90"
-          >
-            Manage Categories
-          </Link>
-          <Link
-            href="/dashboard/menu/new"
+            href="/dashboard/items/new"
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
           >
-            Add Menu Item
+            Add Simple Item
           </Link>
         </div>
       </div>

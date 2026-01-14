@@ -114,7 +114,7 @@ export default async function EditIngredientPage({
         <Link href="/dashboard/ingredients" className="text-primary hover:underline">
           ← Back
         </Link>
-        <h1 className="text-3xl font-bold">Edit Ingredient</h1>
+        <h1 className="text-3xl font-bold">Edit Stock Item</h1>
       </div>
 
       <form action={updateIngredient} className="bg-card rounded-lg border p-6 space-y-6">
@@ -252,7 +252,7 @@ export default async function EditIngredientPage({
           type="submit"
           className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
-          Update Ingredient
+          Update Stock Item
         </button>
       </form>
     </div>

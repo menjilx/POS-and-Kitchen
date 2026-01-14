@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 export default async function TablesPage() {
@@ -18,22 +19,33 @@ export default async function TablesPage() {
     redirect('/dashboard')
   }
 
-  const { data: tables } = await supabase
-    .from('tables')
-    .select('*')
-    .eq('tenant_id', userData.tenant_id)
-    .order('table_number')
+  const [{ data: tables }, { data: tenantData }] = await Promise.all([
+    supabase
+      .from('tables')
+      .select('*')
+      .eq('tenant_id', userData.tenant_id)
+      .order('table_number'),
+    supabase
+      .from('tenants')
+      .select('settings')
+      .eq('id', userData.tenant_id)
+      .single(),
+  ])
+
+  const tenantSettings = tenantData?.settings as unknown as { features?: { menu?: boolean } } | null
+  const menuEnabled = tenantSettings?.features?.menu ?? true
+  if (!menuEnabled) redirect('/dashboard')
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Tables</h1>
-        <a
+        <Link
           href="/dashboard/tables/new"
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
           Add Table
-        </a>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -66,12 +78,12 @@ export default async function TablesPage() {
             )}
 
             <div className="mt-4">
-              <a
+              <Link
                 href={`/dashboard/tables/${table.id}`}
                 className="w-full text-center px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm"
               >
                 Edit
-              </a>
+              </Link>
             </div>
           </div>
         ))}

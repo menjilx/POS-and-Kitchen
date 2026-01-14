@@ -54,7 +54,7 @@ export default function NewIngredientCategoryPage() {
         <Link href="/dashboard/ingredient-categories" className="text-primary hover:underline">
           ← Back
         </Link>
-        <h1 className="text-3xl font-bold">Add Category</h1>
+        <h1 className="text-3xl font-bold">Add Stock Item Category</h1>
       </div>
 
       {error && (

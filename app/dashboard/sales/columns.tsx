@@ -24,7 +24,7 @@ export type Sale = {
   kds_orders: SaleKdsOrder | SaleKdsOrder[] | null
 }
 
-const getKdsStatus = (sale: Sale) => {
+export const getKdsStatus = (sale: Sale) => {
   if (!sale.kds_orders || (Array.isArray(sale.kds_orders) && sale.kds_orders.length === 0)) return 'unknown'
   
   const orders = Array.isArray(sale.kds_orders) ? sale.kds_orders : [sale.kds_orders]
@@ -130,9 +130,10 @@ export const getColumns = (currency: string): ColumnDef<Sale>[] => [
   },
   {
     id: "kds_status",
+    accessorFn: (row) => getKdsStatus(row),
     header: "Kitchen Status",
     cell: ({ row }) => {
-      const kdsStatus = getKdsStatus(row.original)
+      const kdsStatus = row.getValue("kds_status") as string
       if (kdsStatus === 'unknown') return <span className="text-gray-400 text-xs">-</span>
       return (
         <Badge 
@@ -142,6 +143,9 @@ export const getColumns = (currency: string): ColumnDef<Sale>[] => [
           {kdsStatus}
         </Badge>
       )
+    },
+    filterFn: (row, id, value) => {
+      return value.includes(row.getValue(id))
     },
   },
   {

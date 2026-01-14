@@ -44,7 +44,7 @@ export default async function IngredientsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Ingredients</h1>
+        <h1 className="text-3xl font-bold">Stock Items</h1>
         <div className="flex gap-4">
           <Link
             href="/dashboard/ingredient-categories"
@@ -56,7 +56,7 @@ export default async function IngredientsPage() {
             href="/dashboard/ingredients/new"
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
           >
-            Add Ingredient
+            Add Stock Item
           </Link>
         </div>
       </div>

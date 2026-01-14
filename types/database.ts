@@ -18,7 +18,9 @@ export type StockAdjustment = Tables['stock_adjustments']['Row']
 export type Stocktake = Tables['stocktakes']['Row']
 export type StocktakeItem = Tables['stocktake_items']['Row']
 
-export type MenuItem = Tables['menu_items']['Row']
+export type MenuItem = Tables['menu_items']['Row'] & {
+  item_type: 'standard' | 'simple'
+}
 export type RecipeItem = Tables['recipe_items']['Row']
 
 export type Supplier = Tables['suppliers']['Row']

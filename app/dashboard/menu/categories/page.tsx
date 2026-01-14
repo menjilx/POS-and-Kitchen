@@ -19,12 +19,23 @@ export default async function MenuCategoriesPage() {
     redirect('/dashboard')
   }
 
-  const { data: categories } = await supabase
-    .from('menu_categories')
-    .select('*')
-    .eq('tenant_id', userData.tenant_id)
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true })
+  const [{ data: categories }, { data: tenantData }] = await Promise.all([
+    supabase
+      .from('menu_categories')
+      .select('*')
+      .eq('tenant_id', userData.tenant_id)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true }),
+    supabase
+      .from('tenants')
+      .select('settings')
+      .eq('id', userData.tenant_id)
+      .single(),
+  ])
+
+  const tenantSettings = tenantData?.settings as unknown as { features?: { menu?: boolean } } | null
+  const menuEnabled = tenantSettings?.features?.menu ?? true
+  if (!menuEnabled) redirect('/dashboard')
 
   return (
     <div className="space-y-6">

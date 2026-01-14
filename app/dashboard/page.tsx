@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { supabase } from '@/lib/supabase/client'
 import { useTenantSettings } from '@/hooks/use-tenant-settings'
 import { DailySalesChart } from '@/components/dashboard/daily-sales-chart'
+import { DisplayStatusCard, type DisplayStatusRow } from '@/components/dashboard/display-status-card'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, TrendingDownIcon, TrendingUpIcon } from 'lucide-react'
@@ -28,6 +29,10 @@ type DashboardState = {
   daily: { date: string; total: number }[]
   lowStock: { name: string; unit: string; quantity: number; reorderLevel: number }[]
   topSelling: { name: string; quantity: number; revenue: number }[]
+  displayStatusRows: DisplayStatusRow[]
+  totalDisplayOpenOrders: number
+  totalDisplayReadyOrders: number
+  totalDisplayUrgentOrders: number
 }
 
 function isoDateUTC(date: Date) {
@@ -38,6 +43,7 @@ export default function DashboardPage() {
   const { settings, formatCurrency } = useTenantSettings()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [tenantId, setTenantId] = useState<string | null>(null)
   const [state, setState] = useState<DashboardState>({
     todaySalesTotal: 0,
     todayOrderCount: 0,
@@ -52,7 +58,128 @@ export default function DashboardPage() {
     daily: [],
     lowStock: [],
     topSelling: [],
+    displayStatusRows: [],
+    totalDisplayOpenOrders: 0,
+    totalDisplayReadyOrders: 0,
+    totalDisplayUrgentOrders: 0,
   })
+
+  const loadDisplayStatus = useCallback(async (tid: string) => {
+    const [displaysRes, kdsOrdersRes] = await Promise.all([
+      supabase
+        .from('kitchen_displays')
+        .select('id, name, token, created_at')
+        .eq('tenant_id', tid)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('kds_orders')
+        .select('status, priority, assigned_station, created_at, started_at, completed_at')
+        .eq('tenant_id', tid)
+        .not('status', 'eq', 'served')
+        .not('status', 'eq', 'cancelled')
+        .order('created_at', { ascending: true }),
+    ])
+
+    if (displaysRes.error) throw displaysRes.error
+    if (kdsOrdersRes.error) throw kdsOrdersRes.error
+
+    const displays =
+      (((displaysRes.data ?? []) as unknown) as {
+        id: string
+        name: string
+        token: string | null
+        created_at: string
+      }[]) ?? []
+
+    const kdsOrders =
+      (((kdsOrdersRes.data ?? []) as unknown) as {
+        status: 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled'
+        priority: 'normal' | 'high' | 'urgent'
+        assigned_station: string | null
+        created_at: string
+        started_at: string | null
+        completed_at: string | null
+      }[]) ?? []
+
+    const stationMatchesKitchen = (station: string) => {
+      return station.trim().toLowerCase().includes('kitchen')
+    }
+
+    const matchesStation = (display: { id: string, name: string }, orderAssignedStation: string | null) => {
+      // 1. Direct ID match (New behavior)
+      if (orderAssignedStation === display.id) return true
+
+      // 2. Legacy/Name match handling
+      // If assigned_station is null, and this display is a "Kitchen", include it
+      if (!orderAssignedStation && stationMatchesKitchen(display.name)) return true
+
+      // If assigned_station matches name (Legacy behavior)
+      if (orderAssignedStation === display.name) return true
+      
+      // If assigned_station contains "kitchen" and display is "Kitchen" (Legacy fuzzy)
+      if (orderAssignedStation && stationMatchesKitchen(orderAssignedStation) && stationMatchesKitchen(display.name)) return true
+
+      return false
+    }
+
+    const nowMs = Date.now()
+    const displayStatusRows: DisplayStatusRow[] = displays.map((display) => {
+      const stationOrders = kdsOrders.filter((order) => matchesStation(display, order.assigned_station))
+
+      const pendingOrders = stationOrders.filter((o) => o.status === 'pending').length
+      const preparingOrders = stationOrders.filter((o) => o.status === 'preparing').length
+      const readyOrders = stationOrders.filter((o) => o.status === 'ready').length
+
+      const urgentOrders = stationOrders.filter((o) => o.priority === 'urgent').length
+
+      let oldestOrderMinutes: number | null = null
+      let oldestOrderMs = Number.POSITIVE_INFINITY
+      for (const o of stationOrders) {
+        const createdMs = new Date(o.created_at).getTime()
+        if (Number.isFinite(createdMs) && createdMs < oldestOrderMs) oldestOrderMs = createdMs
+      }
+      if (stationOrders.length > 0 && Number.isFinite(oldestOrderMs)) {
+        oldestOrderMinutes = Math.max(0, Math.floor((nowMs - oldestOrderMs) / 60000))
+      }
+
+      let lastActivityMs = Number.NEGATIVE_INFINITY
+      for (const o of stationOrders) {
+        for (const iso of [o.created_at, o.started_at, o.completed_at]) {
+          if (!iso) continue
+          const ms = new Date(iso).getTime()
+          if (Number.isFinite(ms) && ms > lastActivityMs) lastActivityMs = ms
+        }
+      }
+      const lastActivityIso = Number.isFinite(lastActivityMs) ? new Date(lastActivityMs).toISOString() : null
+
+      const openOrders = stationOrders.length
+
+      return {
+        stationName: display.name,
+        openHref: display.token ? `/kds?token=${display.token}` : null,
+        isActive: openOrders > 0,
+        openOrders,
+        pendingOrders,
+        preparingOrders,
+        readyOrders,
+        urgentOrders,
+        oldestOrderMinutes,
+        lastActivityIso,
+      }
+    })
+
+    const totalDisplayOpenOrders = displayStatusRows.reduce((sum, row) => sum + row.openOrders, 0)
+    const totalDisplayReadyOrders = displayStatusRows.reduce((sum, row) => sum + row.readyOrders, 0)
+    const totalDisplayUrgentOrders = displayStatusRows.reduce((sum, row) => sum + row.urgentOrders, 0)
+
+    setState((prev) => ({
+      ...prev,
+      displayStatusRows,
+      totalDisplayOpenOrders,
+      totalDisplayReadyOrders,
+      totalDisplayUrgentOrders,
+    }))
+  }, [])
 
   const formatPercent = useCallback((value: number) => {
     return new Intl.NumberFormat(undefined, {
@@ -129,7 +256,8 @@ export default function DashboardPage() {
       if (userError) throw userError
       if (!userData?.tenant_id) return
 
-      const tenantId = userData.tenant_id
+      const tid = userData.tenant_id
+      setTenantId(tid)
       const today = new Date()
       const todayIso = isoDateUTC(today)
       const yesterday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1))
@@ -150,18 +278,18 @@ export default function DashboardPage() {
         supabase
           .from('sales')
           .select('sale_date,total_amount')
-          .eq('tenant_id', tenantId)
+          .eq('tenant_id', tid)
           .neq('payment_status', 'refunded')
           .gte('sale_date', start30Iso)
           .order('sale_date', { ascending: true }),
         supabase
           .from('stock')
           .select('ingredient_id, quantity, ingredients (name, unit, cost_per_unit, reorder_level)')
-          .eq('tenant_id', tenantId),
+          .eq('tenant_id', tid),
         supabase
           .from('sales')
           .select('sale_items (quantity, total_price, menu_items (name))')
-          .eq('tenant_id', tenantId)
+          .eq('tenant_id', tid)
           .neq('payment_status', 'refunded')
           .gte('sale_date', start30Iso)
           .order('sale_date', { ascending: false })
@@ -169,7 +297,7 @@ export default function DashboardPage() {
         supabase
           .from('sales')
           .select('sale_date,total_amount')
-          .eq('tenant_id', tenantId)
+          .eq('tenant_id', tid)
           .neq('payment_status', 'refunded')
           .gte('sale_date', prevMonthStartIso)
           .lte('sale_date', prevMonthEndIso),
@@ -304,7 +432,10 @@ export default function DashboardPage() {
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5)
 
-      setState({
+      void loadDisplayStatus(tid)
+
+      setState((prev) => ({
+        ...prev,
         todaySalesTotal,
         todayOrderCount,
         yesterdaySalesTotal,
@@ -318,13 +449,40 @@ export default function DashboardPage() {
         daily,
         lowStock: lowStock.slice(0, 5),
         topSelling,
-      })
+      }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard data')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [loadDisplayStatus])
+
+  useEffect(() => {
+    if (!tenantId) return
+
+    const initialTimeoutId = window.setTimeout(() => {
+      void loadDisplayStatus(tenantId)
+    }, 0)
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void loadDisplayStatus(tenantId)
+    }, 5000)
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadDisplayStatus(tenantId)
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      window.clearTimeout(initialTimeoutId)
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [loadDisplayStatus, tenantId])
 
   useEffect(() => {
     void load()
@@ -432,6 +590,13 @@ export default function DashboardPage() {
           footerSubtitle="Items below reorder level"
         />
       </div>
+
+      <DisplayStatusCard
+        rows={state.displayStatusRows}
+        totalOpenOrders={state.totalDisplayOpenOrders}
+        totalReadyOrders={state.totalDisplayReadyOrders}
+        totalUrgentOrders={state.totalDisplayUrgentOrders}
+      />
 
       <Card>
         <CardHeader>

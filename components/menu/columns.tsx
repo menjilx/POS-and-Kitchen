@@ -31,6 +31,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
                 alt={item.name}
                 fill
                 className="object-cover"
+                sizes="32px"
               />
             </div>
           )}

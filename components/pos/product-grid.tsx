@@ -16,7 +16,7 @@ export function ProductGrid({ items, cart, onAdd, onRemove, currency }: ProductG
     <div>
       <h3 className="text-lg font-semibold mb-4">Menu Items</h3>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <ProductCard
             key={item.id}
             item={item}
@@ -24,6 +24,7 @@ export function ProductGrid({ items, cart, onAdd, onRemove, currency }: ProductG
             onAdd={() => onAdd(item)}
             onRemove={() => onRemove(item)}
             currency={currency}
+            priority={index < 6}
           />
         ))}
         {items.length === 0 && (

@@ -6,11 +6,13 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
+import { useTenantSettings } from '@/hooks/use-tenant-settings'
 
 export default function EditMenuCategoryPage() {
   const router = useRouter()
   const params = useParams()
   const id = params?.id as string
+  const { settings, loading: settingsLoading } = useTenantSettings()
   
   const [formData, setFormData] = useState({
     name: '',
@@ -19,6 +21,10 @@ export default function EditMenuCategoryPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!settingsLoading && settings.features?.menu === false) router.replace('/dashboard')
+  }, [router, settings.features?.menu, settingsLoading])
 
   const loadCategory = useCallback(async () => {
     try {

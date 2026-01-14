@@ -42,7 +42,7 @@ const menuItemStatuses = ['active', 'deactivated'] as const
 export default function EditMenuItemPage() {
   const router = useRouter()
   const params = useParams()
-  const { currencySymbol, formatCurrency } = useTenantSettings()
+  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useTenantSettings()
   const { toast } = useToast()
   
   const [formData, setFormData] = useState<MenuItemFormData>({
@@ -58,8 +58,13 @@ export default function EditMenuItemPage() {
   const [recipeItems, setRecipeItems] = useState<RecipeItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [itemType, setItemType] = useState<'standard' | 'simple'>('standard')
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [categories, setCategories] = useState<{ id: string, name: string }[]>([])
+
+  useEffect(() => {
+    if (!settingsLoading && settings.features?.menu === false) router.replace('/dashboard')
+  }, [router, settings.features?.menu, settingsLoading])
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -110,6 +115,7 @@ export default function EditMenuItemPage() {
         ])
 
         if (menuItem?.data) {
+          setItemType((menuItem.data.item_type as 'standard' | 'simple') ?? 'standard')
           const statusRaw = String(menuItem.data.status ?? 'active')
           const status: MenuItemStatus = (menuItemStatuses as readonly string[]).includes(statusRaw)
             ? (statusRaw as MenuItemStatus)
@@ -221,13 +227,20 @@ export default function EditMenuItemPage() {
 
     try {
       setLoading(true)
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${Math.random()}.${fileExt}`
-      const filePath = `${fileName}`
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const nameExt = file.name.includes('.') ? file.name.split('.').pop() : undefined
+      const typeExt = file.type.includes('/') ? file.type.split('/').pop() : undefined
+      const fileExt = (nameExt || typeExt || 'png').toLowerCase()
+      const uuid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const filePath = `${user.id}/${uuid}.${fileExt}`
 
       const { error: uploadError } = await supabase.storage
         .from('menu-images')
-        .upload(filePath, file)
+        .upload(filePath, file, { upsert: true, contentType: file.type || undefined })
 
       if (uploadError) throw uploadError
 
@@ -244,6 +257,7 @@ export default function EditMenuItemPage() {
         variant: "destructive"
       })
     } finally {
+      e.target.value = ''
       setLoading(false)
     }
   }
@@ -266,6 +280,10 @@ export default function EditMenuItemPage() {
         .single()
 
       if (!userData) throw new Error('User not found')
+
+      if (itemType === 'simple' && recipeItems.length > 1) {
+        throw new Error('Simple Items can only have one ingredient linked')
+      }
 
       // Update menu item first
       const { error: updateError } = await supabase
@@ -379,6 +397,7 @@ export default function EditMenuItemPage() {
                         alt="Preview" 
                         fill
                         className="object-cover"
+                        sizes="96px"
                       />
                       <button
                         type="button"

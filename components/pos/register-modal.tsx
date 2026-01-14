@@ -13,6 +13,13 @@ export interface SessionSummary {
   cashSales: number
   cardSales: number
   transactionCount: number
+  refundedAmount: number
+  refundedCount: number
+  voidedAmount: number
+  voidedCount: number
+  discountAmount: number
+  taxAmount: number
+  netSales: number
 }
 
 interface RegisterModalProps {
@@ -101,13 +108,34 @@ export function RegisterModal({
                         <span className="text-muted-foreground">Total Sales:</span>
                         <span className="font-bold text-right">{formatCurrency(sessionSummary.totalSales, currency)}</span>
                         
+                        <span className="text-muted-foreground">Net Sales:</span>
+                        <span className="font-bold text-right">{formatCurrency(sessionSummary.netSales, currency)}</span>
+
                         <span className="text-muted-foreground">Cash Sales:</span>
                         <span className="text-right">{formatCurrency(sessionSummary.cashSales, currency)}</span>
                         
                         <span className="text-muted-foreground">Card Sales:</span>
                         <span className="text-right">{formatCurrency(sessionSummary.cardSales, currency)}</span>
+
+                        <div className="col-span-2 border-t my-1"></div>
+
+                        <span className="text-muted-foreground">Refunds ({sessionSummary.refundedCount}):</span>
+                        <span className="text-right text-red-500">-{formatCurrency(sessionSummary.refundedAmount, currency)}</span>
+
+                        <span className="text-muted-foreground">Voids ({sessionSummary.voidedCount}):</span>
+                        <span className="text-right text-orange-500">{formatCurrency(sessionSummary.voidedAmount, currency)}</span>
+
+                        <div className="col-span-2 border-t my-1"></div>
+
+                        <span className="text-muted-foreground">Discounts:</span>
+                        <span className="text-right text-green-600">-{formatCurrency(sessionSummary.discountAmount, currency)}</span>
+
+                        <span className="text-muted-foreground">Tax:</span>
+                        <span className="text-right">{formatCurrency(sessionSummary.taxAmount, currency)}</span>
                         
-                        <span className="text-muted-foreground">Transactions:</span>
+                        <div className="col-span-2 border-t my-1"></div>
+
+                        <span className="text-muted-foreground">Total Transactions:</span>
                         <span className="text-right">{sessionSummary.transactionCount}</span>
                     </div>
                 </div>

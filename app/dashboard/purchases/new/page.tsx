@@ -45,6 +45,16 @@ export default function NewPurchasePage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [files, setFiles] = useState<File[]>([])
+  const [simpleItems, setSimpleItems] = useState<{ id: string, name: string, ingredient_id: string }[]>([])
+  const [showCreateStockItem, setShowCreateStockItem] = useState(false)
+  const [createStockTargetIndex, setCreateStockTargetIndex] = useState<number | null>(null)
+  const [creatingStockItem, setCreatingStockItem] = useState(false)
+  const [newStockItem, setNewStockItem] = useState({
+    name: '',
+    unit: '',
+    cost_per_unit: '',
+    reorder_level: '',
+  })
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -57,7 +67,7 @@ export default function NewPurchasePage() {
       .single()
 
     if (userData) {
-      const [ingredientsRes, suppliersRes, locationsRes] = await Promise.all([
+      const [ingredientsRes, suppliersRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
         supabase
           .from('ingredients')
           .select('*')
@@ -74,11 +84,48 @@ export default function NewPurchasePage() {
           .select('*')
           .eq('tenant_id', userData.tenant_id)
           .order('name'),
+        supabase
+          .from('menu_items')
+          .select('id, name, stock_ingredient_id')
+          .eq('tenant_id', userData.tenant_id)
+          .eq('item_type', 'simple')
+          .order('name')
       ])
 
       setIngredients(((ingredientsRes.data ?? []) as unknown) as Ingredient[])
       setSuppliers(((suppliersRes.data ?? []) as unknown) as Supplier[])
       setLocations(((locationsRes.data ?? []) as unknown) as Location[])
+
+      const simpleMenuItems = (simpleMenuItemsRes.data ?? []) as Array<{ id: string; name: string; stock_ingredient_id: string | null }>
+      if (simpleMenuItems.length === 0) {
+        setSimpleItems([])
+        return
+      }
+
+      const missingStockLinks = simpleMenuItems.filter((i) => !i.stock_ingredient_id)
+      const recipeByMenuItemId = new Map<string, string>()
+      if (missingStockLinks.length > 0) {
+        const { data: recipeItemsData } = await supabase
+          .from('recipe_items')
+          .select('menu_item_id, ingredient_id')
+          .in('menu_item_id', missingStockLinks.map((i) => i.id))
+
+        ;(recipeItemsData ?? []).forEach((row: { menu_item_id: string; ingredient_id: string }) => {
+          if (!recipeByMenuItemId.has(row.menu_item_id)) {
+            recipeByMenuItemId.set(row.menu_item_id, row.ingredient_id)
+          }
+        })
+      }
+
+      setSimpleItems(
+        simpleMenuItems
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            ingredient_id: item.stock_ingredient_id ?? recipeByMenuItemId.get(item.id) ?? '',
+          }))
+          .filter((item) => item.ingredient_id)
+      )
     }
   }, [])
 
@@ -122,14 +169,37 @@ export default function NewPurchasePage() {
   ) => {
     const updated = [...purchaseItems]
     if (field === 'ingredient_id') {
-      const ingredient = ingredients.find((i) => i.id === value)
+      if (value === '__create_stock_item__') {
+        setCreateStockTargetIndex(index)
+        setShowCreateStockItem(true)
+        return
+      }
+      // Check if value is a simple item ID (prefixed with 'item_') or raw ingredient ID
+      let ingredientId = value
+      let displayName = ''
+      
+      if (value.startsWith('item_')) {
+        const simpleItemId = value.replace('item_', '')
+        const simpleItem = simpleItems.find(i => i.id === simpleItemId)
+        if (simpleItem) {
+          ingredientId = simpleItem.ingredient_id
+          displayName = simpleItem.name
+        }
+      }
+
+      const ingredient = ingredients.find((i) => i.id === ingredientId)
+      
       updated[index] = {
         ...updated[index],
-        [field]: value,
-        ingredient_name: ingredient?.name || '',
+        ingredient_id: ingredientId,
+        // If we found a simple item name, use it. Otherwise use ingredient name.
+        ingredient_name: displayName || ingredient?.name || '',
         unit: ingredient?.unit || '',
         current_cost: Number(ingredient?.cost_per_unit) || 0,
         unit_price: Number(ingredient?.cost_per_unit) || 0,
+        // We persist the selection value (e.g. 'item_123') in a temporary field if needed for UI state, 
+        // but here we just update the core data. 
+        // NOTE: The select element below needs to be controlled carefully.
       }
     } else if (field === 'quantity' || field === 'unit_price') {
       updated[index] = { ...updated[index], [field]: Number(value) }
@@ -137,6 +207,77 @@ export default function NewPurchasePage() {
       updated[index] = { ...updated[index], [field]: value }
     }
     setPurchaseItems(updated)
+  }
+
+  const handleCreateStockItem = async () => {
+    if (!newStockItem.name.trim() || !newStockItem.unit.trim()) {
+      setError('Stock item name and unit are required')
+      return
+    }
+
+    setCreatingStockItem(true)
+    setError('')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('id', user.id)
+        .single()
+
+      if (!userData?.tenant_id) throw new Error('User not found')
+
+      const { data: created, error: createError } = await supabase
+        .from('ingredients')
+        .insert({
+          tenant_id: userData.tenant_id,
+          name: newStockItem.name.trim(),
+          unit: newStockItem.unit.trim(),
+          cost_per_unit: Number(newStockItem.cost_per_unit) || 0,
+          reorder_level: Number(newStockItem.reorder_level) || 10,
+          status: 'active',
+        })
+        .select('*')
+        .single()
+
+      if (createError) throw createError
+      if (!created) throw new Error('Failed to create stock item')
+
+      const createdIngredient = created as unknown as Ingredient
+      setIngredients((prev) => [...prev, createdIngredient].sort((a, b) => a.name.localeCompare(b.name)))
+
+      if (createStockTargetIndex !== null) {
+        setPurchaseItems((prev) => {
+          const next = [...prev]
+          const firstLocation = locations[0]
+          next[createStockTargetIndex] = {
+            ...next[createStockTargetIndex],
+            ingredient_id: createdIngredient.id,
+            ingredient_name: createdIngredient.name,
+            unit: createdIngredient.unit,
+            current_cost: Number(createdIngredient.cost_per_unit) || 0,
+            unit_price: Number(createdIngredient.cost_per_unit) || 0,
+            location_id: next[createStockTargetIndex].location_id || firstLocation?.id || '',
+          }
+          return next
+        })
+      }
+
+      setShowCreateStockItem(false)
+      setCreateStockTargetIndex(null)
+      setNewStockItem({
+        name: '',
+        unit: '',
+        cost_per_unit: '',
+        reorder_level: '',
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create stock item')
+    } finally {
+      setCreatingStockItem(false)
+    }
   }
 
   const calculateTotals = () => {
@@ -375,32 +516,138 @@ export default function NewPurchasePage() {
           <div className="bg-card rounded-lg border p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">Items</h2>
-              <button
-                type="button"
-                onClick={addPurchaseItem}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-              >
-                <Plus size={16} />
-                Add Item
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateStockTargetIndex(null)
+                    setShowCreateStockItem(true)
+                  }}
+                  className="px-4 py-2 border rounded-md hover:bg-accent"
+                >
+                  Add Stock Item
+                </button>
+                <button
+                  type="button"
+                  onClick={addPurchaseItem}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                >
+                  <Plus size={16} />
+                  Add Item
+                </button>
+              </div>
             </div>
+
+            {showCreateStockItem && (
+              <div className="border rounded-md p-4 mb-4 bg-muted/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-medium">New Stock Item</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateStockItem(false)
+                      setCreateStockTargetIndex(null)
+                      setNewStockItem({
+                        name: '',
+                        unit: '',
+                        cost_per_unit: '',
+                        reorder_level: '',
+                      })
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <input
+                    type="text"
+                    value={newStockItem.name}
+                    onChange={(e) => setNewStockItem((p) => ({ ...p, name: e.target.value }))}
+                    className="px-3 py-2 border rounded-md"
+                    placeholder="Name"
+                  />
+                  <input
+                    type="text"
+                    value={newStockItem.unit}
+                    onChange={(e) => setNewStockItem((p) => ({ ...p, unit: e.target.value }))}
+                    className="px-3 py-2 border rounded-md"
+                    placeholder="Unit (e.g., kg, pcs)"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newStockItem.cost_per_unit}
+                    onChange={(e) => setNewStockItem((p) => ({ ...p, cost_per_unit: e.target.value }))}
+                    className="px-3 py-2 border rounded-md"
+                    placeholder={`Cost/Unit (${currencySymbol})`}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newStockItem.reorder_level}
+                    onChange={(e) => setNewStockItem((p) => ({ ...p, reorder_level: e.target.value }))}
+                    className="px-3 py-2 border rounded-md"
+                    placeholder="Reorder level"
+                  />
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleCreateStockItem}
+                    disabled={creatingStockItem}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {creatingStockItem ? 'Creating...' : 'Create'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               {purchaseItems.map((item, index) => (
                 <div key={index} className="border p-4 rounded-md">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Ingredient</label>
+                      <label className="block text-sm font-medium mb-1">Product</label>
                       <select
-                        value={item.ingredient_id}
+                        // We need to determine if the current ingredient_id matches a simple item to show the correct selection
+                        // This is a bit tricky because multiple simple items could map to same ingredient.
+                        // We'll rely on the user selection. If they change it, we update. 
+                        // For display value, we can try to find if it matches a known simple item or ingredient.
+                        value={
+                           // Try to find if this ingredient ID is associated with the name we stored
+                           // This is imperfect but works for the UI state
+                           simpleItems.find(si => si.ingredient_id === item.ingredient_id && si.name === item.ingredient_name) 
+                             ? `item_${simpleItems.find(si => si.ingredient_id === item.ingredient_id && si.name === item.ingredient_name)?.id}`
+                             : item.ingredient_id
+                        }
                         onChange={(e) => updatePurchaseItem(index, 'ingredient_id', e.target.value)}
                         className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                       >
-                        {ingredients.map((ing) => (
-                          <option key={ing.id} value={ing.id}>
-                            {ing.name} (Current: {formatCurrency(Number(ing.cost_per_unit))}/{ing.unit})
-                          </option>
-                        ))}
+                        <option value="">Select product</option>
+                        <option value="__create_stock_item__">+ Create stock item…</option>
+                        
+                        {simpleItems.length > 0 && (
+                          <optgroup label="Simple Items">
+                            {simpleItems.map((si) => {
+                              const ing = ingredients.find(i => i.id === si.ingredient_id)
+                              return (
+                                <option key={si.id} value={`item_${si.id}`}>
+                                  {si.name} {ing ? `(Current: ${formatCurrency(Number(ing.cost_per_unit))}/${ing.unit})` : ''}
+                                </option>
+                              )
+                            })}
+                          </optgroup>
+                        )}
+
+                        <optgroup label="Stock Items">
+                          {ingredients.map((ing) => (
+                            <option key={ing.id} value={ing.id}>
+                              {ing.name} (Current: {formatCurrency(Number(ing.cost_per_unit))}/{ing.unit})
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </div>
 

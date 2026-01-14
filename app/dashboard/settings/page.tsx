@@ -26,6 +26,9 @@ interface TenantSettings {
   currency: string
   timezone: string
   tax_rate: number
+  features?: {
+    menu?: boolean
+  }
   receipt?: ReceiptSettings
 }
 
@@ -53,6 +56,9 @@ export default function SettingsPage() {
     currency: 'USD',
     timezone: 'UTC',
     tax_rate: 0,
+    features: {
+      menu: true,
+    },
     receipt: {
       showLogo: false,
       headerText: 'SHOP NAME',
@@ -111,6 +117,10 @@ export default function SettingsPage() {
         setSettings(prev => ({
           ...prev,
           ...loadedSettings,
+          features: {
+            ...prev.features,
+            ...loadedSettings.features,
+          },
           receipt: {
             ...prev.receipt!,
             ...loadedSettings.receipt
@@ -572,6 +582,27 @@ export default function SettingsPage() {
                     onChange={(e) => setSettings({ ...settings, tax_rate: parseFloat(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border rounded-md"
                   />
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Menu Module</label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={settings.features?.menu ?? true}
+                      onChange={(e) =>
+                        setSettings({
+                          ...settings,
+                          features: { ...(settings.features ?? {}), menu: e.target.checked },
+                        })
+                      }
+                      className="h-4 w-4"
+                    />
+                    <span>Enable Menu</span>
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Disabling hides Menu, Items, and Tables pages.
+                  </p>
                 </div>
 
                 <div className="pt-4">

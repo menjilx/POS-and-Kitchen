@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import {
   Dialog,
   DialogContent,
@@ -16,9 +17,10 @@ import { User, X, Receipt, Printer, Download, Paperclip } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
-import { buildReceiptText, normalizeReceiptSettings, PrintableReceipt, type ReceiptData } from "@/components/receipt/printable-receipt"
+import { normalizeReceiptSettings, PrintableReceipt, type ReceiptData } from "@/components/receipt/printable-receipt"
 import { supabase } from "@/lib/supabase/client"
 import { PaymentAdditionalData } from "@/types/database"
+import { format } from "date-fns"
 
 interface PaymentModalProps {
   isOpen: boolean
@@ -27,7 +29,8 @@ interface PaymentModalProps {
     method: string,
     amount: number,
     isHouseAccount: boolean,
-    additionalData?: PaymentAdditionalData
+    additionalData?: PaymentAdditionalData,
+    destination?: string
   ) => Promise<{ saleId: string; orderNumber: string }>
   totalAmount: number
   customerName: string
@@ -36,8 +39,10 @@ interface PaymentModalProps {
   subtotal: number
   tax: number
   discount: number
+  discountName?: string
   currency?: string
   isLoading?: boolean
+  kitchenDisplays?: { id: string, name: string }[]
 }
 
 export function PaymentModal({
@@ -51,23 +56,35 @@ export function PaymentModal({
   subtotal,
   tax,
   discount,
+  discountName,
   currency = "$",
-  isLoading = false
+  isLoading = false,
+  kitchenDisplays = []
 }: PaymentModalProps) {
   const { settings: tenantSettings } = useTenantSettings()
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "house_account">("cash")
   const [receivedAmount, setReceivedAmount] = useState<string>("")
   const [showReceipt, setShowReceipt] = useState(false)
+  const [selectedDestination, setSelectedDestination] = useState<string>("")
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
   const [cashierName, setCashierName] = useState<string>("")
   const [isFirstInput, setIsFirstInput] = useState(true)
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
   const [printingReceipt, setPrintingReceipt] = useState(false)
+  const receiptRef = useRef<HTMLDivElement>(null)
+  const previousTitleRef = useRef<string | null>(null)
 
   // Card Support Info
   const [cardRef, setCardRef] = useState("")
   const [cardNotes, setCardNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
+  const [currentDate] = useState(() => format(new Date(), "M-d-yyyy h:mm a"))
+
+  const defaultDestinationId = kitchenDisplays[0]?.id ?? ""
+  const effectiveDestinationId =
+    kitchenDisplays.some((display) => display.id === selectedDestination)
+      ? selectedDestination
+      : defaultDestinationId
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -83,13 +100,70 @@ export function PaymentModal({
 
   useEffect(() => {
     if (!printingReceipt) return
+
+    document.documentElement.classList.add('pos-printing-receipt')
+
+    if (previousTitleRef.current === null) {
+      previousTitleRef.current = document.title
+    }
+
+    const safeOrder = (receiptData?.orderNumber || 'receipt').replace(/[^a-z0-9_-]+/gi, '_')
+    document.title = safeOrder
+
     const handleAfterPrint = () => setPrintingReceipt(false)
     window.addEventListener('afterprint', handleAfterPrint)
-    window.setTimeout(() => window.print(), 0)
+
+    const waitForImages = async () => {
+      const root = receiptRef.current
+      if (!root) return
+      const images = Array.from(root.querySelectorAll('img'))
+      if (images.length === 0) return
+
+      await Promise.race([
+        Promise.all(
+          images.map(
+            (img) =>
+              new Promise<void>((resolve) => {
+                if ((img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth > 0) return resolve()
+                const cleanup = () => {
+                  img.removeEventListener('load', onLoad)
+                  img.removeEventListener('error', onError)
+                }
+                const onLoad = () => {
+                  cleanup()
+                  resolve()
+                }
+                const onError = () => {
+                  cleanup()
+                  resolve()
+                }
+                img.addEventListener('load', onLoad)
+                img.addEventListener('error', onError)
+              })
+          )
+        ),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 1200)),
+      ])
+    }
+
+    const doPrint = async () => {
+      await waitForImages()
+      window.print()
+    }
+
+    window.setTimeout(() => {
+      void doPrint()
+    }, 50)
+
     return () => {
       window.removeEventListener('afterprint', handleAfterPrint)
+      document.documentElement.classList.remove('pos-printing-receipt')
+      if (previousTitleRef.current !== null) {
+        document.title = previousTitleRef.current
+        previousTitleRef.current = null
+      }
     }
-  }, [printingReceipt])
+  }, [printingReceipt, receiptData?.orderNumber])
 
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen)
@@ -98,11 +172,11 @@ export function PaymentModal({
       setPaymentMethod("cash")
       setShowReceipt(false)
       setReceiptData(null)
-      setPrintingReceipt(false)
       setIsFirstInput(true)
       setCardRef("")
       setCardNotes("")
       setAttachmentName(null)
+      setSelectedDestination("")
     }
   }
 
@@ -141,6 +215,10 @@ export function PaymentModal({
         // Assuming full payment for this iteration.
         return
     }
+
+    if (kitchenDisplays.length > 0 && !effectiveDestinationId) {
+      return
+    }
     
     // Append card details to a structured note if card
     // Note: This assumes onPaymentComplete can handle or we modify how we pass it.
@@ -161,15 +239,19 @@ export function PaymentModal({
       subtotal,
       tax,
       discount,
+      discountName,
       total: totalAmount,
       cashierName: cashierName || 'Cashier',
       customerName,
       orderNumber,
       date: new Date().toLocaleString(),
       paymentMethod,
+      paymentStatus: paymentMethod === 'house_account' ? 'pending' : 'paid',
+      paymentRef: cardRef,
+      paymentNotes: cardNotes,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
-      currency,
+      currency: tenantSettings.currency || 'USD',
     }
 
     const { orderNumber: resolvedOrderNumber } = await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account', {
@@ -178,7 +260,7 @@ export function PaymentModal({
       attachment: attachmentName,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
-    })
+    }, effectiveDestinationId)
 
     setReceiptData({
       ...snapshot,
@@ -196,34 +278,69 @@ export function PaymentModal({
 
   const receiptSettings = normalizeReceiptSettings(tenantSettings.receipt)
 
+  const handlePrintReceipt = () => {
+    if (!receiptData) return
+    setPrintingReceipt(true)
+  }
+
   const handleDownloadReceipt = () => {
     if (!receiptData) return
-    const content = buildReceiptText(receiptSettings, receiptData)
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    const safeOrder = (receiptData.orderNumber || 'receipt').replace(/[^a-z0-9]+/gi, '_')
-    link.setAttribute('download', `${safeOrder}.txt`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    setPrintingReceipt(true)
   }
+
+  const canUseDom = typeof document !== "undefined"
+
+  const receiptPortal =
+    canUseDom && receiptData
+      ? createPortal(
+          <>
+            <div
+              className={
+                printingReceipt
+                  ? "pos-receipt-print-root fixed inset-0 z-99999 bg-white overflow-auto"
+                  : "pos-receipt-print-root hidden print:block print:fixed print:inset-0 print:z-99999 print:bg-white print:overflow-visible"
+              }
+            >
+              <PrintableReceipt ref={receiptRef} settings={receiptSettings} data={receiptData} />
+            </div>
+            <style>{`
+              @media print {
+                html.pos-printing-receipt body * {
+                  visibility: hidden !important;
+                }
+
+                html.pos-printing-receipt .pos-receipt-print-root,
+                html.pos-printing-receipt .pos-receipt-print-root * {
+                  visibility: visible !important;
+                }
+
+                html.pos-printing-receipt .pos-receipt-print-root {
+                  position: absolute !important;
+                  top: 0 !important;
+                  left: 0 !important;
+                  width: 100% !important;
+                  height: auto !important;
+                  overflow: visible !important;
+                  display: block !important;
+                }
+
+                @page {
+                  margin: 0;
+                  size: auto;
+                }
+              }
+            `}</style>
+          </>,
+          document.body
+        )
+      : null
 
   if (showReceipt) {
     return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-          <DialogContent className="sm:max-w-100">
-          {/* Printable Receipt - Hidden on screen, visible on print */}
-          <div className="block fixed -left-625 top-0 z-9999 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
-             {receiptData && (
-                <PrintableReceipt 
-                    settings={receiptSettings}
-                    data={receiptData}
-                />
-             )}
-          </div>
+      <>
+        {receiptPortal}
+          <Dialog open={isOpen} onOpenChange={onClose}>
+          <DialogContent className="sm:max-w-100 pos-payment-dialog print:hidden">
           <div className="print:hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -241,7 +358,7 @@ export function PaymentModal({
             </p>
 
             <div className="flex gap-3 w-full mt-4">
-                <Button className="flex-1" variant="outline" onClick={() => setPrintingReceipt(true)} disabled={!receiptData}>
+                <Button className="flex-1" variant="outline" onClick={handlePrintReceipt} disabled={!receiptData}>
                     <Printer className="mr-2 h-4 w-4" /> Print
                 </Button>
                 <Button className="flex-1" variant="outline" onClick={handleDownloadReceipt} disabled={!receiptData}>
@@ -256,6 +373,7 @@ export function PaymentModal({
           </div>
         </DialogContent>
       </Dialog>
+    </>
     )
   }
 
@@ -272,7 +390,7 @@ export function PaymentModal({
             <div className="flex items-center gap-2 text-muted-foreground">
                 <span className="font-mono bg-muted px-2 py-0.5 rounded text-xs">{orderNumber}</span>
                 <span>•</span>
-                <span>{new Date().toLocaleDateString()}</span>
+                <span>{currentDate}</span>
             </div>
           </div>
 
@@ -329,23 +447,42 @@ export function PaymentModal({
         {/* Right Side: Payment Input */}
         <div className="w-full md:w-100 p-6 flex flex-col bg-background">
             <div className="flex justify-between items-center mb-6">
-                 <h3 className="font-semibold">Select Payment Method</h3>
+                 <h3 className="font-semibold">Payment Details</h3>
                  <Button variant="ghost" size="icon" onClick={onClose} className="md:hidden">
                     <X className="h-4 w-4" />
                  </Button>
             </div>
 
             <div className="space-y-6 flex-1">
-                <Select value={paymentMethod} onValueChange={(v: "cash" | "card" | "house_account") => setPaymentMethod(v)}>
-                    <SelectTrigger className="w-full h-12 text-lg">
-                        <SelectValue placeholder="Select method" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="cash">Cash</SelectItem>
-                        <SelectItem value="card">Credit/Debit Card</SelectItem>
-                        <SelectItem value="house_account">House Account (In-house)</SelectItem>
-                    </SelectContent>
-                </Select>
+                {kitchenDisplays.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-base font-semibold">Send Order To</Label>
+                    <Select value={effectiveDestinationId} onValueChange={setSelectedDestination}>
+                        <SelectTrigger className="w-full h-12 text-lg">
+                            <SelectValue placeholder="Select Kitchen Display" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {kitchenDisplays.map(d => (
+                              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                    <Label className="text-base font-semibold">Payment Method</Label>
+                    <Select value={paymentMethod} onValueChange={(v: "cash" | "card" | "house_account") => setPaymentMethod(v)}>
+                        <SelectTrigger className="w-full h-12 text-lg">
+                            <SelectValue placeholder="Select method" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="cash">Cash</SelectItem>
+                            <SelectItem value="card">Credit/Debit Card</SelectItem>
+                            <SelectItem value="house_account">House Account (In-house)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
 
                 <div className="text-center py-4">
                      <span className="text-4xl font-bold tracking-tight">
@@ -448,7 +585,7 @@ export function PaymentModal({
                 <Button 
                     className="w-full h-12 text-lg font-bold" 
                     onClick={handleProcessPayment}
-                    disabled={isLoading || (paymentMethod === 'cash' && (parseFloat(receivedAmount) || 0) < totalAmount)}
+                    disabled={isLoading || (paymentMethod === 'cash' && (parseFloat(receivedAmount) || 0) < totalAmount) || (kitchenDisplays.length > 0 && !effectiveDestinationId)}
                 >
                     {isLoading ? "Processing..." : `Pay ${formatCurrency(totalAmount, currency)}`}
                 </Button>

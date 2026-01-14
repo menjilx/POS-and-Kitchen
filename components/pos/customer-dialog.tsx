@@ -259,7 +259,7 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <div className="flex flex-col gap-1 cursor-pointer hover:opacity-80">
+        <div className="flex flex-col gap-2 cursor-pointer hover:opacity-80">
             <Label className="cursor-pointer">Customer</Label>
             <div className="flex items-center justify-between border rounded-md p-2 h-10 bg-background overflow-hidden">
                 <div className="flex items-center gap-2 flex-1 min-w-0">

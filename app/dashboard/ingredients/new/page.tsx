@@ -101,7 +101,7 @@ export default function NewIngredientPage() {
 
       router.push('/dashboard/ingredients')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create ingredient')
+      setError(err instanceof Error ? err.message : 'Failed to create stock item')
     } finally {
       setLoading(false)
     }
@@ -113,7 +113,7 @@ export default function NewIngredientPage() {
         <Link href="/dashboard/ingredients" className="text-primary hover:underline">
           ← Back
         </Link>
-        <h1 className="text-3xl font-bold">Add Ingredient</h1>
+        <h1 className="text-3xl font-bold">Add Stock Item</h1>
       </div>
 
       {error && (
@@ -246,7 +246,7 @@ export default function NewIngredientPage() {
             disabled={loading}
             className="w-full py-2 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
           >
-            {loading ? 'Creating...' : 'Create Ingredient'}
+            {loading ? 'Creating...' : 'Create Stock Item'}
           </button>
         </form>
       </div>

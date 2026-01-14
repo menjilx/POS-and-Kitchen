@@ -135,6 +135,8 @@ export interface Database {
           contribution_margin: number
           status: 'active' | 'deactivated'
           image_url: string | null
+          item_type: 'standard' | 'simple'
+          stock_ingredient_id: string | null
           created_at: string
           updated_at: string
         }

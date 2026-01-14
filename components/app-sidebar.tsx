@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import { NavUser } from "@/components/nav-user"
+import { useTenantSettings } from "@/hooks/use-tenant-settings"
 
 type NavItem = {
   title: string
@@ -93,9 +94,15 @@ const navGroups: NavGroup[] = [
     label: "Menu",
     items: [
       {
-        title: "Menu Items",
+        title: "Menu",
         url: "/dashboard/menu",
         icon: ShoppingBag,
+        roles: ["owner", "manager"],
+      },
+      {
+        title: "Items",
+        url: "/dashboard/items",
+        icon: Package,
         roles: ["owner", "manager"],
       },
       {
@@ -110,13 +117,13 @@ const navGroups: NavGroup[] = [
     label: "Inventory",
     items: [
       {
-        title: "Ingredients",
+        title: "Stock Items",
         url: "/dashboard/ingredients",
         icon: Package,
         roles: ["owner", "manager"],
       },
       {
-        title: "Stock",
+        title: "Stock Levels",
         url: "/dashboard/stock",
         icon: Package,
         roles: ["owner", "manager", "staff"],
@@ -192,6 +199,8 @@ export function AppSidebar({
   tenantName: string
 }) {
   const pathname = usePathname()
+  const { settings, loading } = useTenantSettings()
+  const menuEnabled = loading ? true : (settings.features?.menu ?? true)
 
   return (
     <Sidebar {...props} collapsible="icon">
@@ -218,6 +227,7 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent>
         {navGroups
+          .filter((group) => (menuEnabled ? true : group.label !== "Menu"))
           .map((group) => ({
             ...group,
             items: group.items.filter((item) => item.roles.includes(user.role)),
@@ -254,10 +264,10 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild tooltip="Get Help">
-              <a href="mailto:support@kitchensystem.app">
+              <Link href="/dashboard/help">
                 <CircleHelp />
                 <span>Get Help</span>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
 

@@ -13,9 +13,10 @@ interface ProductCardProps {
   onAdd: () => void
   onRemove: () => void
   currency?: string
+  priority?: boolean
 }
 
-export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$" }: ProductCardProps) {
+export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", priority = false }: ProductCardProps) {
   return (
     <Card className={`overflow-hidden transition-all hover:shadow-md ${quantity > 0 ? "ring-2 ring-primary" : ""}`}>
       <div className="aspect-4/3 bg-muted relative flex items-center justify-center">
@@ -24,7 +25,9 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$" }:
             src={item.image_url} 
             alt={item.name} 
             fill
-            className="object-cover" 
+            className="object-cover"
+            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            priority={priority}
           />
         ) : (
           <ImageIcon className="h-10 w-10 text-muted-foreground opacity-50" />

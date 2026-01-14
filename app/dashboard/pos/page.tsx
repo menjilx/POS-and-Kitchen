@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { Search, Clock, LogOut, X, History } from "lucide-react"
+import { Search, Clock, LogOut, X, List } from "lucide-react"
 import type { MenuItem, Table, SaleType, CashierSession, Customer, PaymentAdditionalData } from "@/types/database"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useToast } from "@/hooks/use-toast"
@@ -17,16 +17,19 @@ import { RegisterModal, SessionSummary } from "@/components/pos/register-modal"
 import { HeldOrdersModal, HeldOrder } from "@/components/pos/held-orders-modal"
 import { PaymentModal } from "@/components/pos/payment-modal"
 import { TransactionsModal, Transaction } from "@/components/pos/transactions-modal"
+import { OrderDetailsModal } from "@/components/pos/order-details-modal"
+import { format, formatDistanceToNow } from "date-fns"
 
 type CartItem = {
   item: MenuItem
   quantity: number
 }
 
-type OrderStatus = "ready" | "in_kitchen" | "pending"
+type OrderStatus = "ready" | "preparing" | "pending" | "served" | "cancelled"
 
 type ActiveOrder = {
   id: string
+  saleId?: string
   orderNumber: string
   customerName: string
   status: OrderStatus
@@ -93,6 +96,7 @@ export default function POSPage() {
   const [showHeldOrders, setShowHeldOrders] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<ActiveOrder | null>(null)
 
   // Cashier Session State
   const [cashierSession, setCashierSession] = useState<CashierSession | null>(null)
@@ -111,9 +115,333 @@ export default function POSPage() {
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [kitchenDisplays, setKitchenDisplays] = useState<{ id: string, name: string }[]>([])
 
+  const loadData = useCallback(async () => {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      if (authError) throw authError
+      if (!user) return
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const allowedRoles = new Set(['owner', 'manager', 'staff'])
+      const allowedStatuses = new Set(['active', 'deactivated'])
+
+      const resolveTenantId = async () => {
+        const { data: existingUser, error: existingUserError } = await supabase
+          .from('users')
+          .select('tenant_id')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        if (existingUserError) throw existingUserError
+        if (existingUser?.tenant_id) return existingUser.tenant_id
+
+        const meta = (user.user_metadata ?? {}) as Record<string, unknown>
+        const metaTenantIdRaw = typeof meta.tenant_id === 'string' ? meta.tenant_id : null
+        const metaTenantId = metaTenantIdRaw && uuidRegex.test(metaTenantIdRaw) ? metaTenantIdRaw : null
+        const email = user.email
+
+        if (!email || !metaTenantId) return null
+
+        const fullName = typeof meta.full_name === 'string' ? meta.full_name : null
+        const role = typeof meta.role === 'string' && allowedRoles.has(meta.role) ? meta.role : 'staff'
+        const status = typeof meta.status === 'string' && allowedStatuses.has(meta.status) ? meta.status : 'active'
+
+        const { data: insertedUser, error: insertError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            tenant_id: metaTenantId,
+            email,
+            full_name: fullName,
+            role,
+            status,
+          })
+          .select('tenant_id')
+          .single()
+
+        if (insertError) {
+          const { data: reloadedUser, error: reloadError } = await supabase
+            .from('users')
+            .select('tenant_id')
+            .eq('id', user.id)
+            .maybeSingle()
+
+          if (!reloadError && reloadedUser?.tenant_id) return reloadedUser.tenant_id
+          throw insertError
+        }
+
+        return insertedUser?.tenant_id ?? null
+      }
+
+      const tid = await resolveTenantId()
+      if (!tid) {
+        toast({
+          title: 'No tenant found',
+          description: 'Your account is missing tenant access. Please re-login or contact your admin.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      setTenantId(tid)
+
+      const [
+        walkInResult,
+        displaysResult,
+        sessionResult,
+        tenantResult,
+        discountsResult,
+        menuResult,
+        tablesResult,
+        kdsResult,
+        heldSalesResult,
+      ] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('*')
+          .eq('tenant_id', tid)
+          .in('name', ['Walk-in', 'Walk in', 'Walk-in Customer', 'Walkin', 'Walkin Customer'])
+          .limit(10),
+        supabase
+          .from('kitchen_displays')
+          .select('id, name')
+          .eq('tenant_id', tid),
+        supabase
+          .from('cashier_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'open')
+          .single(),
+        supabase
+          .from('tenants')
+          .select('settings')
+          .eq('id', tid)
+          .single(),
+        supabase
+          .from('discounts')
+          .select('*')
+          .eq('tenant_id', tid)
+          .eq('is_active', true)
+          .order('name'),
+        supabase
+          .from("menu_items")
+          .select("*")
+          .eq("tenant_id", tid)
+          .eq("status", "active")
+          .order("name"),
+        supabase
+          .from("tables")
+          .select("*")
+          .eq("tenant_id", tid)
+          .in("status", ["available", "reserved"])
+          .order("table_number"),
+        supabase
+          .from("kds_orders")
+          .select("*")
+          .eq("tenant_id", tid)
+          .in("status", ["pending", "preparing", "ready"])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("sales")
+          .select("*, sale_items(quantity)")
+          .eq("tenant_id", tid)
+          .eq("payment_status", "pending")
+          .order("created_at", { ascending: false }),
+      ])
+
+      if (menuResult.error) throw menuResult.error
+
+      const walkInCandidates = walkInResult.data
+      const displays = displaysResult.data
+      const session = sessionResult.data
+      const tenantData = tenantResult.data
+      const discountsRes = discountsResult.data
+      const menuRes = menuResult.data
+      const tablesRes = tablesResult.data
+      const kdsRes = kdsResult.data
+      const heldSales = heldSalesResult.data
+
+      if (walkInCandidates && walkInCandidates.length > 0) {
+        const normalizeName = (value: string) =>
+          value
+            .trim()
+            .toLowerCase()
+            .replace(/[-_]/g, ' ')
+            .replace(/\s+/g, ' ')
+
+        const isCanonical = (value: string) => normalizeName(value) === 'walk in'
+        const active = walkInCandidates.filter((c) => c.is_active !== false)
+        const candidates = active.length > 0 ? active : walkInCandidates
+        const canonical = candidates.find((c) => isCanonical(String(c.name ?? '')))
+        setSelectedCustomer((canonical ?? candidates[0]) as Customer)
+      }
+
+      if (displays) {
+        setKitchenDisplays(displays)
+      }
+
+      if (session) {
+        setCashierSession(session)
+      } else {
+        setRegisterModalMode('open')
+        setShowRegisterModal(true)
+      }
+
+      if (tenantData?.settings && typeof tenantData.settings === 'object' && 'tax_rate' in tenantData.settings) {
+        setTaxRate(Number((tenantData.settings as { tax_rate?: unknown }).tax_rate) || 0)
+      }
+
+      if (discountsRes) setDiscounts(discountsRes as Discount[])
+
+      if (menuRes) {
+        setMenuItems(menuRes)
+        const uniqueCategories = Array.from(new Set(menuRes.map(i => i.category).filter(Boolean) as string[]))
+        setCategories(uniqueCategories)
+      }
+
+      if (tablesRes) setTables(tablesRes)
+
+      if (kdsRes && kdsRes.length > 0) {
+        const saleIds = kdsRes.map(k => k.sale_id)
+        const { data: salesRes } = await supabase
+          .from("sales")
+          .select("id, notes, tables(table_number)")
+          .in("id", saleIds)
+
+        const salesMap = new Map(salesRes?.map(s => [s.id, s]))
+
+        const orders: ActiveOrder[] = kdsRes.map(kds => {
+          const sale = salesMap.get(kds.sale_id)
+          let name = "Guest"
+          if (sale?.notes?.startsWith("Customer: ")) {
+            name = sale.notes.replace("Customer: ", "")
+          }
+
+          const tableData = sale?.tables as unknown as { table_number: string } | null
+          const tableNumber = tableData?.table_number
+
+          return {
+            id: kds.id,
+            saleId: kds.sale_id,
+            orderNumber: kds.order_number,
+            customerName: name,
+            status: kds.status as OrderStatus,
+            assignedStation: kds.assigned_station,
+            tableNumber: tableNumber ? String(tableNumber) : undefined,
+          }
+        })
+        setActiveOrders(orders)
+      } else {
+        setActiveOrders([])
+      }
+
+      if (heldSales) {
+        const saleIds = heldSales.map(s => s.id)
+        if (saleIds.length > 0) {
+          const { data: kdsStatus } = await supabase
+            .from("kds_orders")
+            .select("sale_id, status")
+            .in("sale_id", saleIds)
+
+          const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]))
+
+          const held: HeldOrder[] = heldSales.map(s => {
+            let name = "Guest"
+            if (s.notes?.startsWith("Customer: ")) {
+              name = s.notes.replace("Customer: ", "")
+              if (name.includes(" | Note: ")) {
+                name = name.split(" | Note: ")[0]
+              }
+            }
+            return {
+              id: s.id,
+              orderNumber: s.order_number,
+              customerName: name,
+              totalAmount: s.total_amount,
+              date: format(new Date(s.sale_time), "MMM-dd, yyyy h:mm a"),
+              time: `Wait: ${formatDistanceToNow(new Date(s.sale_time))}`,
+              itemsCount: s.sale_items?.reduce((acc: number, item: { quantity?: number | null }) => acc + (item.quantity || 0), 0) || 0,
+              status: statusMap.get(s.id),
+            }
+          })
+          setHeldOrders(held)
+        } else {
+          setHeldOrders([])
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Failed to load POS data',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    }
+  }, [toast])
+
   useEffect(() => {
     void loadData()
-  }, [])
+  }, [loadData])
+
+  // Poll for KDS updates
+  useEffect(() => {
+    if (!tenantId) return
+
+    const fetchKDSUpdates = async () => {
+      try {
+        const { data: kdsRes, error } = await supabase
+          .from("kds_orders")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .in("status", ["pending", "preparing", "ready"])
+          .order("created_at", { ascending: false })
+
+        if (error) throw error
+
+        if (kdsRes && kdsRes.length > 0) {
+            const saleIds = kdsRes.map(k => k.sale_id)
+            const { data: salesRes } = await supabase
+              .from("sales")
+              .select("id, notes, tables(table_number)")
+              .in("id", saleIds)
+    
+            const salesMap = new Map(salesRes?.map(s => [s.id, s]))
+    
+            const orders: ActiveOrder[] = kdsRes.map(kds => {
+              const sale = salesMap.get(kds.sale_id)
+              let name = "Guest"
+              if (sale?.notes?.startsWith("Customer: ")) {
+                name = sale.notes.replace("Customer: ", "")
+              }
+    
+              const tableData = sale?.tables as unknown as { table_number: string } | null
+              const tableNumber = tableData?.table_number
+    
+              return {
+                id: kds.id,
+                saleId: kds.sale_id,
+                orderNumber: kds.order_number,
+                customerName: name,
+                status: kds.status as OrderStatus,
+                assignedStation: kds.assigned_station,
+                tableNumber: tableNumber ? String(tableNumber) : undefined,
+              }
+            })
+            setActiveOrders(orders)
+        } else {
+            setActiveOrders([])
+        }
+      } catch (err) {
+        console.error("Error polling KDS:", err)
+      }
+    }
+
+    // Initial fetch
+    // void fetchKDSUpdates() // activeOrders is already set by loadData, but we could fetch again or just wait for interval
+
+    const intervalId = setInterval(fetchKDSUpdates, 5000)
+
+    return () => clearInterval(intervalId)
+  }, [tenantId])
 
   useEffect(() => {
     const ensureOrderNumber = async () => {
@@ -132,219 +460,7 @@ export default function POSPage() {
     void ensureOrderNumber()
   }, [tenantId, activeSaleId, currentOrderId])
 
-  const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
 
-    const { data: userData } = await supabase
-      .from("users")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .single()
-
-    if (!userData?.tenant_id) return
-    const tenantId = userData.tenant_id
-    setTenantId(tenantId)
-
-    const [
-        { data: walkInCandidates },
-        { data: displays },
-        { data: session },
-        { data: tenantData },
-        { data: discountsRes },
-        { data: menuRes },
-        { data: tablesRes },
-        { data: kdsRes },
-        { data: heldSales }
-    ] = await Promise.all([
-        // Fetch default Walk-in customer
-        supabase
-          .from('customers')
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .in('name', ['Walk-in', 'Walk in', 'Walk-in Customer', 'Walkin', 'Walkin Customer'])
-          .limit(10),
-        
-        // Fetch Kitchen Displays
-        supabase
-          .from('kitchen_displays')
-          .select('id, name')
-          .eq('tenant_id', tenantId),
-
-        // Check for open cashier session
-        supabase
-          .from('cashier_sessions')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'open')
-          .single(),
-
-        // Fetch tenant settings for tax rate
-        supabase
-          .from('tenants')
-          .select('settings')
-          .eq('id', tenantId)
-          .single(),
-
-        // Fetch Discounts
-        supabase
-          .from('discounts')
-          .select('*')
-          .eq('tenant_id', tenantId)
-          .eq('is_active', true)
-          .order('name'),
-
-        // Fetch Menu Items
-        supabase
-          .from("menu_items")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .eq("status", "active")
-          .order("name"),
-
-        // Fetch Tables
-        supabase
-          .from("tables")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .in("status", ["available", "reserved"])
-          .order("table_number"),
-
-        // Fetch Active Orders (KDS)
-        supabase
-          .from("kds_orders")
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .in("status", ["pending", "preparing", "ready"])
-          .order("created_at", { ascending: false }),
-
-        // Fetch Held Orders
-        supabase
-          .from("sales")
-          .select("*, sale_items(quantity)")
-          .eq("tenant_id", tenantId)
-          .eq("payment_status", "pending")
-          .order("created_at", { ascending: false })
-    ])
-
-    // Process Walk-in
-    if (walkInCandidates && walkInCandidates.length > 0) {
-      const normalizeName = (value: string) =>
-        value
-          .trim()
-          .toLowerCase()
-          .replace(/[-_]/g, ' ')
-          .replace(/\s+/g, ' ')
-
-      const isCanonical = (value: string) => normalizeName(value) === 'walk in'
-      const active = walkInCandidates.filter((c) => c.is_active !== false)
-      const candidates = active.length > 0 ? active : walkInCandidates
-      const canonical = candidates.find((c) => isCanonical(String(c.name ?? '')))
-      setSelectedCustomer((canonical ?? candidates[0]) as Customer)
-    }
-
-    // Process Displays
-    if (displays) {
-        setKitchenDisplays(displays)
-    }
-
-    // Process Session
-    if (session) {
-      setCashierSession(session)
-    } else {
-      setRegisterModalMode('open')
-      setShowRegisterModal(true)
-    }
-
-    // Process Tenant Settings
-    if (tenantData?.settings && typeof tenantData.settings === 'object' && 'tax_rate' in tenantData.settings) {
-       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-       setTaxRate(Number((tenantData.settings as any).tax_rate) || 0)
-    }
-
-    // Process Discounts
-    if (discountsRes) setDiscounts(discountsRes as Discount[])
-
-    // Process Menu Items
-    if (menuRes) {
-      setMenuItems(menuRes)
-      // Extract categories
-      const uniqueCategories = Array.from(new Set(menuRes.map(i => i.category).filter(Boolean) as string[]))
-      setCategories(uniqueCategories)
-    }
-
-    // Process Tables
-    if (tablesRes) setTables(tablesRes)
-
-    // Process Active Orders (KDS)
-    if (kdsRes && kdsRes.length > 0) {
-        const saleIds = kdsRes.map(k => k.sale_id)
-        const { data: salesRes } = await supabase
-            .from("sales")
-            .select("id, notes")
-            .in("id", saleIds)
-        
-        const salesMap = new Map(salesRes?.map(s => [s.id, s]))
-
-        const orders: ActiveOrder[] = kdsRes.map(kds => {
-            const sale = salesMap.get(kds.sale_id)
-            let name = "Guest"
-            if (sale?.notes?.startsWith("Customer: ")) {
-                name = sale.notes.replace("Customer: ", "")
-            }
-            
-            return {
-                id: kds.id,
-                orderNumber: kds.order_number,
-                customerName: name,
-                status: kds.status === 'ready' ? 'ready' : 'in_kitchen',
-                assignedStation: kds.assigned_station
-            }
-        })
-        setActiveOrders(orders)
-    } else {
-        setActiveOrders([])
-    }
-
-    // Process Held Orders
-    if (heldSales) {
-        // Fetch KDS status for these sales
-        const saleIds = heldSales.map(s => s.id)
-        if (saleIds.length > 0) {
-            const { data: kdsStatus } = await supabase
-                .from("kds_orders")
-                .select("sale_id, status")
-                .in("sale_id", saleIds)
-                
-            const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]))
-
-            const held: HeldOrder[] = heldSales.map(s => {
-                let name = "Guest"
-                if (s.notes?.startsWith("Customer: ")) {
-                    name = s.notes.replace("Customer: ", "")
-                    // Remove note part if exists for display
-                    if (name.includes(" | Note: ")) {
-                        name = name.split(" | Note: ")[0]
-                    }
-                }
-                return {
-                    id: s.id,
-                    orderNumber: s.order_number,
-                    customerName: name,
-                    totalAmount: s.total_amount,
-                    date: new Date(s.sale_date).toLocaleDateString(),
-                    time: s.sale_time,
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    itemsCount: s.sale_items?.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) || 0,
-                    status: statusMap.get(s.id)
-                }
-            })
-            setHeldOrders(held)
-        } else {
-            setHeldOrders([])
-        }
-    }
-  }
 
   const filteredItems = useMemo(() => {
     return menuItems.filter(item => {
@@ -445,32 +561,94 @@ export default function POSPage() {
     // Calculate session summary
     setIsProcessing(true)
     try {
+        const toNumber = (value: unknown) => {
+          if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+          if (typeof value === 'string') {
+            const parsed = Number.parseFloat(value)
+            return Number.isFinite(parsed) ? parsed : 0
+          }
+          return 0
+        }
+
         const { data: sales, error } = await supabase
-            .from('sales')
-            .select('total_amount, payment_method, payment_status')
-            .eq('tenant_id', cashierSession.tenant_id)
-            .eq('created_by', cashierSession.user_id)
-            .gte('created_at', cashierSession.opening_time)
-            .in('payment_status', ['paid']) // Only count paid sales
-        
+          .from('sales')
+          .select('id, total_amount, payment_method, payment_status, discount_amount, tax_amount')
+          .eq('tenant_id', cashierSession.tenant_id)
+          .eq('created_by', cashierSession.user_id)
+          .gte('created_at', cashierSession.opening_time)
+          .in('payment_status', ['paid', 'refunded'])
+
         if (error) throw error
+
+        const rows = Array.isArray(sales) ? sales : []
+
+        const paidRows = rows.filter((s) => s?.payment_status === 'paid')
+        const refundedRows = rows.filter((s) => s?.payment_status === 'refunded')
+
+        const refundedSaleIds = refundedRows.map((s) => String(s.id)).filter(Boolean)
+        const voidedSaleIdSet = new Set<string>()
+
+        if (refundedSaleIds.length > 0) {
+          const { data: kdsOrders, error: kdsError } = await supabase
+            .from('kds_orders')
+            .select('sale_id, status')
+            .eq('tenant_id', cashierSession.tenant_id)
+            .in('sale_id', refundedSaleIds)
+
+          if (kdsError) throw kdsError
+
+          const kdsRows = Array.isArray(kdsOrders) ? kdsOrders : []
+          kdsRows.forEach((k) => {
+            if (k?.status === 'cancelled' && k?.sale_id) {
+              voidedSaleIdSet.add(String(k.sale_id))
+            }
+          })
+        }
+
+        const voidedRows = refundedRows.filter((s) => voidedSaleIdSet.has(String(s.id)))
+        const nonVoidedRefundRows = refundedRows.filter((s) => !voidedSaleIdSet.has(String(s.id)))
 
         let totalSales = 0
         let cashSales = 0
         let cardSales = 0
-        const transactionCount = sales?.length || 0
+        let discountAmount = 0
+        let taxAmount = 0
+        let netSales = 0
 
-        sales?.forEach(s => {
-            totalSales += s.total_amount
-            if (s.payment_method === 'cash') cashSales += s.total_amount
-            else if (s.payment_method === 'card') cardSales += s.total_amount
+        paidRows.forEach((s) => {
+          const totalAmount = toNumber(s?.total_amount)
+          const tax = toNumber(s?.tax_amount)
+          const discount = toNumber(s?.discount_amount)
+
+          totalSales += totalAmount
+          taxAmount += tax
+          discountAmount += discount
+          netSales += totalAmount - tax
+
+          if (s?.payment_method === 'cash') cashSales += totalAmount
+          if (s?.payment_method === 'card') cardSales += totalAmount
         })
 
+        const refundedAmount = nonVoidedRefundRows.reduce(
+          (acc, s) => acc + toNumber(s?.total_amount),
+          0
+        )
+        const voidedAmount = voidedRows.reduce((acc, s) => acc + toNumber(s?.total_amount), 0)
+
+        const transactionCount = paidRows.length
+
         setSessionSummary({
-            totalSales,
-            cashSales,
-            cardSales,
-            transactionCount
+          totalSales: totalSales || 0,
+          cashSales: cashSales || 0,
+          cardSales: cardSales || 0,
+          transactionCount: transactionCount || 0,
+          refundedAmount: refundedAmount || 0,
+          refundedCount: nonVoidedRefundRows.length || 0,
+          voidedAmount: voidedAmount || 0,
+          voidedCount: voidedRows.length || 0,
+          discountAmount: discountAmount || 0,
+          taxAmount: taxAmount || 0,
+          netSales: netSales || 0,
         })
 
     } catch (err) {
@@ -495,6 +673,8 @@ export default function POSPage() {
                 sale_date,
                 sale_time,
                 notes,
+                discount_amount,
+                tax_amount,
                 tables (table_number),
                 sale_items (quantity)
             `)
@@ -510,9 +690,9 @@ export default function POSPage() {
             return
         }
 
-        const rows = (data as unknown) as SaleReportRow[]
+        const rows = (data as unknown) as (SaleReportRow & { discount_amount: number, tax_amount: number })[]
 
-        const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Payment Method", "Status"]
+        const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Discount", "Tax", "Payment Method", "Status"]
         const csvContent = [
             headers.join(","),
             ...rows.map((s) => {
@@ -531,6 +711,12 @@ export default function POSPage() {
                   ? tableRel[0]?.table_number
                   : tableRel?.table_number
 
+                // Determine Status (Paid, Refunded, Void)
+                let status = s.payment_status
+                if (s.payment_status === 'refunded' && !s.payment_method) {
+                    status = 'void'
+                }
+
                 return [
                     s.order_number,
                     new Date(s.sale_date).toLocaleDateString(),
@@ -539,8 +725,10 @@ export default function POSPage() {
                     tableNum || "",
                     itemsCount,
                     s.total_amount,
+                    s.discount_amount || 0,
+                    s.tax_amount || 0,
                     s.payment_method || "",
-                    s.payment_status
+                    status
                 ].join(",")
             })
         ].join("\n")
@@ -641,7 +829,14 @@ export default function POSPage() {
     return { subtotal, discount: discountAmount, tax, total: taxableAmount + tax }
   }, [cartItems, taxRate, selectedDiscountId, discounts, customDiscount])
 
-  const handleSendToKitchen = async (destination?: string) => {
+  const discountName = useMemo(() => {
+    if (selectedDiscountId === 'custom') {
+        return `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
+    }
+    return discounts.find(d => d.id === selectedDiscountId)?.name
+  }, [selectedDiscountId, customDiscount, discounts])
+
+  const handleSendToKitchen = async (destination?: string, options?: { holdAfterSend?: boolean }) => {
     if (!tenantId) return
     if (cartItems.length === 0) return
 
@@ -649,13 +844,19 @@ export default function POSPage() {
     try {
        await saveOrder('pending', null, destination)
        
+       const destinationName = destination 
+         ? kitchenDisplays.find(d => d.id === destination)?.name || destination
+         : 'Kitchen'
+
        toast({
-        title: "Sent to Kitchen",
-        description: `Order sent to ${destination || 'Kitchen'}.`,
+        title: "Sent",
+        description: `Order sent to ${destinationName}.`,
        })
-       
-       clearCart()
-       loadData()
+
+       if (options?.holdAfterSend) {
+         clearCart()
+         loadData()
+       }
     } catch (err: unknown) {
         console.error("Error sending to kitchen:", JSON.stringify(err, null, 2))
         toast({ title: "Error", description: "Failed to send order", variant: "destructive" })
@@ -776,6 +977,7 @@ export default function POSPage() {
 
           if (saleError) throw saleError
           saleId = saleData.id
+          setActiveSaleId(saleData.id)
       }
 
       // Insert Items
@@ -832,7 +1034,7 @@ export default function POSPage() {
       return { saleId, orderNumber }
   }
   
-  const handlePaymentComplete = async (method: string, receivedAmount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData) => {
+  const handlePaymentComplete = async (method: string, receivedAmount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData, destination?: string) => {
       setIsProcessing(true)
       try {
           const status = isHouseAccount ? 'pending' : 'paid'
@@ -841,7 +1043,7 @@ export default function POSPage() {
             receivedAmount: isHouseAccount ? undefined : receivedAmount,
           } satisfies PaymentAdditionalData
 
-          const result = await saveOrder(status, method, undefined, mergedAdditionalData)
+          const result = await saveOrder(status, method, destination, mergedAdditionalData)
           
           toast({
               title: "Payment Successful",
@@ -925,7 +1127,7 @@ export default function POSPage() {
   }
 
   return (
-    <div className="absolute top-(--header-height) left-0 right-0 bottom-0 flex overflow-hidden bg-background md:rounded-b-xl">
+    <div className="print:hidden absolute top-(--header-height) left-0 right-0 bottom-0 flex overflow-hidden bg-background md:rounded-b-xl">
       {/* Left Content */}
       <div className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
         {/* Header / Search */}
@@ -943,10 +1145,6 @@ export default function POSPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
             </div>
-            <Button variant="outline" onClick={() => setShowTransactionsModal(true)} className="gap-2">
-                <History className="h-4 w-4" />
-                History
-            </Button>
             <Button variant="outline" onClick={() => setShowHeldOrders(true)} className="gap-2">
                 <Clock className="h-4 w-4" />
                 Held Orders
@@ -955,6 +1153,10 @@ export default function POSPage() {
                         {heldOrders.length}
                     </span>
                 )}
+            </Button>
+            <Button variant="outline" onClick={() => setShowTransactionsModal(true)} className="gap-2">
+                <List className="h-4 w-4" />
+                All Orders
             </Button>
             {cashierSession && (
             <Button 
@@ -969,7 +1171,11 @@ export default function POSPage() {
         </div>
 
         {/* Order Queue */}
-        <OrderQueue orders={activeOrders} />
+        <OrderQueue 
+            orders={activeOrders} 
+            kitchenDisplays={kitchenDisplays} 
+            onOrderClick={(order) => setSelectedOrderDetails(order)}
+        />
 
         {/* Main Content Scroll Area */}
         <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
@@ -1078,8 +1284,17 @@ export default function POSPage() {
         subtotal={cartTotal.subtotal}
         tax={cartTotal.tax}
         discount={cartTotal.discount}
+        discountName={discountName}
         currency={currencySymbol}
         isLoading={isProcessing}
+        kitchenDisplays={kitchenDisplays}
+      />
+
+      <OrderDetailsModal 
+        isOpen={!!selectedOrderDetails}
+        onClose={() => setSelectedOrderDetails(null)}
+        order={selectedOrderDetails}
+        currency={currencySymbol}
       />
     </div>
   )

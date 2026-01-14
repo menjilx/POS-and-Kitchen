@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { useTenantSettings } from '@/hooks/use-tenant-settings'
 
 export default function NewMenuCategoryPage() {
   const router = useRouter()
+  const { settings, loading: settingsLoading } = useTenantSettings()
   
   const [formData, setFormData] = useState({
     name: '',
@@ -15,6 +17,10 @@ export default function NewMenuCategoryPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!settingsLoading && settings.features?.menu === false) router.replace('/dashboard')
+  }, [router, settings.features?.menu, settingsLoading])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -74,7 +74,12 @@ export function DataTable<TData, TValue>({
                       className={cn(canSort && "cursor-pointer select-none")}
                       onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                     >
-                      <div className={cn("flex items-center gap-1", isRightAligned && "justify-end")}>
+                      <div
+                        className={cn(
+                          "flex w-full items-center gap-1",
+                          isRightAligned && "justify-end"
+                        )}
+                      >
                         {headerContent}
                         {canSort ? (
                           <ArrowUpDown
@@ -100,11 +105,25 @@ export function DataTable<TData, TValue>({
                   data-state={row.getIsSelected() && "selected"}
                   className={cn(getRowClassName?.(row.original))}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const cellContent = flexRender(cell.column.columnDef.cell, cell.getContext())
+                    const cellElement = React.isValidElement<{ className?: string }>(cellContent)
+                      ? cellContent
+                      : null
+                    const isRightAligned =
+                      typeof cellElement?.props?.className === "string" &&
+                      cellElement.props.className.includes("text-right")
+
+                    return (
+                      <TableCell key={cell.id} className={cn(isRightAligned && "text-right")}>
+                        {isRightAligned ? (
+                          <div className="flex w-full justify-end">{cellContent}</div>
+                        ) : (
+                          cellContent
+                        )}
+                      </TableCell>
+                    )
+                  })}
                 </TableRow>
               ))
             ) : (

@@ -19,7 +19,7 @@ export const getColumns = (
 ): ColumnDef<StockItem>[] => [
   {
     accessorKey: "ingredient_name",
-    header: "Ingredient",
+    header: "Stock Item",
     cell: ({ row }) => <span className="font-medium">{row.original.ingredient_name}</span>,
   },
   {

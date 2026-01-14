@@ -83,6 +83,7 @@ export default function SaleDetailPage() {
   const [updatingKdsOrderId, setUpdatingKdsOrderId] = useState<string | null>(null)
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings | null>(null)
   const [printingReceipt, setPrintingReceipt] = useState(false)
+  const [stations, setStations] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
     const fetchSale = async () => {
@@ -112,6 +113,16 @@ export default function SaleDetailPage() {
       const settings = tenantData?.settings as { currency?: string; receipt?: Partial<ReceiptSettings> } | null
       if (settings?.currency) setCurrency(settings.currency)
       setReceiptSettings(normalizeReceiptSettings(settings?.receipt))
+
+      // Fetch Stations
+      const { data: stationsData } = await supabase
+        .from('kitchen_displays')
+        .select('id, name')
+        .eq('tenant_id', userData.tenant_id)
+
+      if (stationsData) {
+        setStations(stationsData)
+      }
 
       // Fetch Sale
       const { data: saleData, error } = await supabase
@@ -404,7 +415,11 @@ export default function SaleDetailPage() {
                                 return (
                                 <div key={idx} className="flex justify-between items-center p-2 bg-muted rounded">
                                     <div className="flex flex-col">
-                                        <span className="font-medium">{kds.assigned_station || 'Kitchen'}</span>
+                                        <span className="font-medium">
+                                          {stations.find((s) => s.id === kds.assigned_station)?.name ||
+                                            kds.assigned_station ||
+                                            'Kitchen'}
+                                        </span>
                                         {duration && <span className="text-xs text-muted-foreground">Prep: {duration}</span>}
                                     </div>
                                     <div className="flex items-center gap-2">

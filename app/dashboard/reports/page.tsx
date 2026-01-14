@@ -25,9 +25,9 @@ type MenuPerformanceRow = {
   margin_percentage: number
 }
 
-type IngredientTrendRow = {
-  ingredient_id: string
-  ingredient_name: string
+type StockItemTrendRow = {
+  stock_item_id: string
+  stock_item_name: string
   unit: string
   avg_cost_per_unit: number
   last_cost_per_unit: number
@@ -43,7 +43,7 @@ type DateRange = {
 const tabs = [
   { id: 'pnl', label: 'Profit & Loss' },
   { id: 'menu', label: 'Menu Performance' },
-  { id: 'ingredients', label: 'Ingredient Trends' },
+  { id: 'ingredients', label: 'Stock Item Trends' },
 ] as const
 
 const defaultDateRange: DateRange = (() => {
@@ -58,7 +58,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [pnlData, setPnlData] = useState<ProfitLossRow | null>(null)
   const [menuPerformance, setMenuPerformance] = useState<MenuPerformanceRow[]>([])
-  const [ingredientTrends, setIngredientTrends] = useState<IngredientTrendRow[]>([])
+  const [ingredientTrends, setIngredientTrends] = useState<StockItemTrendRow[]>([])
   const [dateRange, setDateRange] = useState<DateRange>(defaultDateRange)
 
   const menuColumns = useMemo<ColumnDef<MenuPerformanceRow>[]>(() => [
@@ -69,48 +69,48 @@ export default function ReportsPage() {
     },
     {
       accessorKey: "quantity_sold",
-      header: () => <div className="text-right">Quantity Sold</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.quantity_sold}</div>,
+      header: "Quantity Sold",
+      cell: ({ row }) => <span>{row.original.quantity_sold}</span>,
     },
     {
       accessorKey: "total_revenue",
-      header: () => <div className="text-right">Revenue</div>,
-      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.total_revenue)}</div>,
+      header: "Revenue",
+      cell: ({ row }) => <span>{formatCurrency(row.original.total_revenue)}</span>,
     },
     {
       accessorKey: "total_cost",
-      header: () => <div className="text-right">Total Cost</div>,
-      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.total_cost)}</div>,
+      header: "Total Cost",
+      cell: ({ row }) => <span>{formatCurrency(row.original.total_cost)}</span>,
     },
     {
       accessorKey: "total_margin",
-      header: () => <div className="text-right">Total Margin</div>,
+      header: "Total Margin",
       cell: ({ row }) => (
-        <div className={`text-right font-bold ${
+        <span className={`font-bold ${
           row.original.total_margin >= 0 ? 'text-green-600' : 'text-red-600'
         }`}>
           {formatCurrency(row.original.total_margin)}
-        </div>
+        </span>
       ),
     },
     {
       accessorKey: "margin_percentage",
-      header: () => <div className="text-right">Margin %</div>,
+      header: "Margin %",
       cell: ({ row }) => (
-        <div className={`text-right ${
+        <span className={`${
           row.original.margin_percentage >= 0 ? 'text-green-600' : 'text-red-600'
         }`}>
           {row.original.margin_percentage.toFixed(1)}%
-        </div>
+        </span>
       ),
     },
   ], [formatCurrency])
 
-  const ingredientColumns = useMemo<ColumnDef<IngredientTrendRow>[]>(() => [
+  const ingredientColumns = useMemo<ColumnDef<StockItemTrendRow>[]>(() => [
     {
-      accessorKey: "ingredient_name",
-      header: "Ingredient",
-      cell: ({ row }) => <span className="font-medium">{row.original.ingredient_name}</span>,
+      accessorKey: "stock_item_name",
+      header: "Stock Item",
+      cell: ({ row }) => <span className="font-medium">{row.original.stock_item_name}</span>,
     },
     {
       accessorKey: "unit",
@@ -119,28 +119,28 @@ export default function ReportsPage() {
     },
     {
       accessorKey: "avg_cost_per_unit",
-      header: () => <div className="text-right">Avg Cost/Unit</div>,
-      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.avg_cost_per_unit)}</div>,
+      header: "Avg Cost/Unit",
+      cell: ({ row }) => <span>{formatCurrency(row.original.avg_cost_per_unit)}</span>,
     },
     {
       accessorKey: "last_cost_per_unit",
-      header: () => <div className="text-right">Last Cost</div>,
-      cell: ({ row }) => <div className="text-right">{formatCurrency(row.original.last_cost_per_unit)}</div>,
+      header: "Last Cost",
+      cell: ({ row }) => <span>{formatCurrency(row.original.last_cost_per_unit)}</span>,
     },
     {
       accessorKey: "total_purchased",
-      header: () => <div className="text-right">Total Purchased</div>,
-      cell: ({ row }) => <div className="text-right">{row.original.total_purchased.toFixed(2)}</div>,
+      header: "Total Purchased",
+      cell: ({ row }) => <span>{row.original.total_purchased.toFixed(2)}</span>,
     },
     {
       accessorKey: "cost_change_percentage",
-      header: () => <div className="text-right">Cost Change</div>,
+      header: "Cost Change",
       cell: ({ row }) => (
-        <div className={`text-right font-bold ${
+        <span className={`font-bold ${
           row.original.cost_change_percentage > 0 ? 'text-red-600' : 'text-green-600'
         }`}>
           {row.original.cost_change_percentage > 0 ? '+' : ''}{row.original.cost_change_percentage.toFixed(1)}%
-        </div>
+        </span>
       ),
     },
   ], [formatCurrency])
@@ -174,12 +174,12 @@ export default function ReportsPage() {
       })
       setMenuPerformance(((data ?? []) as unknown) as MenuPerformanceRow[])
     } else if (activeTab === 'ingredients') {
-      const { data } = await supabase.rpc('get_ingredient_cost_trends', {
+      const { data } = await supabase.rpc('get_stock_item_cost_trends', {
         p_tenant_id: userData.tenant_id,
         p_start_date: dateRange.start,
         p_end_date: dateRange.end,
       })
-      setIngredientTrends(((data ?? []) as unknown) as IngredientTrendRow[])
+      setIngredientTrends(((data ?? []) as unknown) as StockItemTrendRow[])
     }
 
     setLoading(false)
@@ -206,7 +206,7 @@ export default function ReportsPage() {
       case 'menu':
         return 'Analysis of your menu items based on sales volume and profitability. Helps identify your best sellers and most profitable items.'
       case 'ingredients':
-        return 'Track price fluctuations of your ingredients based on purchase history. Compares current standard cost vs. weighted average cost from recent purchases.'
+        return 'Track price fluctuations of your stock items based on purchase history. Compares current standard cost vs. weighted average cost from recent purchases.'
     }
   }
 
@@ -333,8 +333,8 @@ export default function ReportsPage() {
       ) : (
         ingredientTrends.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 border rounded-lg bg-card p-8 text-center">
-            <p className="text-muted-foreground text-lg mb-2">No ingredient data found</p>
-            <p className="text-sm text-muted-foreground">Add ingredients and record purchases to see cost trends.</p>
+            <p className="text-muted-foreground text-lg mb-2">No stock item data found</p>
+            <p className="text-sm text-muted-foreground">Add stock items and record purchases to see cost trends.</p>
           </div>
         ) : (
           <DataTable columns={ingredientColumns} data={ingredientTrends} />

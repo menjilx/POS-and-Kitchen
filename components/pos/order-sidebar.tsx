@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,6 +19,14 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface CartItem {
   item: MenuItem
@@ -63,7 +72,7 @@ interface OrderSidebarProps {
   setCustomDiscount?: (discount: { type: 'percentage' | 'fixed', value: number }) => void
   onTaxChange?: (rate: number) => void
   tenantId?: string | null
-  onSendToKitchen: (destination?: string) => void
+  onSendToKitchen: (destination?: string, options?: { holdAfterSend?: boolean }) => void
   kitchenDisplays?: { id: string, name: string }[]
 }
 
@@ -99,6 +108,13 @@ export function OrderSidebar({
   kitchenDisplays = []
 }: OrderSidebarProps) {
   const { toast } = useToast()
+
+  const [sendDialogOpen, setSendDialogOpen] = useState(false)
+  const [pendingDestination, setPendingDestination] = useState<{id: string, name: string} | null>(null)
+
+  const resolvedDisplays = useMemo(() => {
+    return kitchenDisplays
+  }, [kitchenDisplays])
 
   const copyOrderNumber = () => {
     navigator.clipboard.writeText(orderId)
@@ -174,10 +190,10 @@ export function OrderSidebar({
             />
           </div>
           {orderType === "dine_in" && (
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="table-number">Table Number</Label>
               <Select value={tableId} onValueChange={setTableId}>
-                <SelectTrigger id="table-number">
+                <SelectTrigger id="table-number" className="h-10">
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
@@ -319,7 +335,7 @@ export function OrderSidebar({
              <DropdownMenu>
                <DropdownMenuTrigger asChild>
                  <Button 
-                    variant="secondary" 
+                     variant="secondary" 
                     disabled={cartItems.length === 0 || isProcessing}
                     className="bg-blue-100 text-blue-700 hover:bg-blue-200"
                  >
@@ -328,8 +344,11 @@ export function OrderSidebar({
                  </Button>
                </DropdownMenuTrigger>
                <DropdownMenuContent align="start" className="w-48">
-                 {(kitchenDisplays.length > 0 ? kitchenDisplays : [{id: 'k', name: 'Kitchen'}, {id: 'b', name: 'Bar'}]).map(d => (
-                   <DropdownMenuItem key={d.name} onClick={() => onSendToKitchen(d.name)}>
+                 {resolvedDisplays.map(d => (
+                   <DropdownMenuItem key={d.id} onClick={() => {
+                     setPendingDestination(d)
+                     setSendDialogOpen(true)
+                   }}>
                      <ChefHat className="mr-2 h-4 w-4" />
                      {d.name}
                    </DropdownMenuItem>
@@ -345,6 +364,49 @@ export function OrderSidebar({
             </Button>
         </div>
       </div>
+
+      <Dialog open={sendDialogOpen} onOpenChange={(open) => {
+        setSendDialogOpen(open)
+        if (!open) setPendingDestination(null)
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send Order</DialogTitle>
+            <DialogDescription>
+              {pendingDestination ? `Send this order to ${pendingDestination.name}.` : 'Send this order to a display.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setSendDialogOpen(false)
+              setPendingDestination(null)
+            }}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                onSendToKitchen(pendingDestination?.id)
+                setSendDialogOpen(false)
+                setPendingDestination(null)
+              }}
+              disabled={!pendingDestination || isProcessing || cartItems.length === 0}
+            >
+              Send
+            </Button>
+            <Button
+              onClick={() => {
+                onSendToKitchen(pendingDestination?.id, { holdAfterSend: true })
+                setSendDialogOpen(false)
+                setPendingDestination(null)
+              }}
+              disabled={!pendingDestination || isProcessing || cartItems.length === 0}
+            >
+              Send & Hold
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
