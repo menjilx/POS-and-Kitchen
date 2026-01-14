@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 
 import { supabase } from '@/lib/supabase/client'
 import { useTenantSettings } from '@/hooks/use-tenant-settings'
@@ -9,6 +10,7 @@ import { DisplayStatusCard, type DisplayStatusRow } from '@/components/dashboard
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, TrendingDownIcon, TrendingUpIcon } from 'lucide-react'
+import type { UserRole } from '@/types/database'
 
 type DailySalesRow = {
   sale_date: string
@@ -33,6 +35,14 @@ type DashboardState = {
   totalDisplayOpenOrders: number
   totalDisplayReadyOrders: number
   totalDisplayUrgentOrders: number
+  upcomingReservations: {
+    id: string
+    customerName: string
+    reservationTime: string
+    partySize: number
+    status: string
+    tableNumber: string | null
+  }[]
 }
 
 function isoDateUTC(date: Date) {
@@ -44,6 +54,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tenantId, setTenantId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [state, setState] = useState<DashboardState>({
     todaySalesTotal: 0,
     todayOrderCount: 0,
@@ -62,6 +73,7 @@ export default function DashboardPage() {
     totalDisplayOpenOrders: 0,
     totalDisplayReadyOrders: 0,
     totalDisplayUrgentOrders: 0,
+    upcomingReservations: [],
   })
 
   const loadDisplayStatus = useCallback(async (tid: string) => {
@@ -250,7 +262,7 @@ export default function DashboardPage() {
 
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('tenant_id')
+        .select('tenant_id, role')
         .eq('id', user.id)
         .single()
       if (userError) throw userError
@@ -258,6 +270,7 @@ export default function DashboardPage() {
 
       const tid = userData.tenant_id
       setTenantId(tid)
+      setUserRole((userData.role as UserRole) ?? null)
       const today = new Date()
       const todayIso = isoDateUTC(today)
       const yesterday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 1))
@@ -274,7 +287,11 @@ export default function DashboardPage() {
       const prevMonthStartIso = isoDateUTC(prevMonthStart)
       const prevMonthEndIso = isoDateUTC(prevMonthEnd)
 
-      const [salesRes, stockRes, salesItemsRes, prevMonthSalesRes] = await Promise.all([
+      const canSeeReservations = userData.role === 'owner' || userData.role === 'manager'
+      const nowIso = new Date().toISOString()
+      const next24Iso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+      const [salesRes, stockRes, salesItemsRes, prevMonthSalesRes, upcomingReservationsRes] = await Promise.all([
         supabase
           .from('sales')
           .select('sale_date,total_amount')
@@ -301,12 +318,23 @@ export default function DashboardPage() {
           .neq('payment_status', 'refunded')
           .gte('sale_date', prevMonthStartIso)
           .lte('sale_date', prevMonthEndIso),
+        canSeeReservations
+          ? supabase
+              .from('reservations')
+              .select('id, customer_name, reservation_time, party_size, status, tables(table_number)')
+              .eq('tenant_id', tid)
+              .gte('reservation_time', nowIso)
+              .lt('reservation_time', next24Iso)
+              .order('reservation_time', { ascending: true })
+              .limit(8)
+          : Promise.resolve({ data: [], error: null }),
       ])
 
       if (salesRes.error) throw salesRes.error
       if (stockRes.error) throw stockRes.error
       if (salesItemsRes.error) throw salesItemsRes.error
       if (prevMonthSalesRes.error) throw prevMonthSalesRes.error
+      if (upcomingReservationsRes.error) throw upcomingReservationsRes.error
 
       const rows = ((salesRes.data ?? []) as unknown) as DailySalesRow[]
 
@@ -432,6 +460,26 @@ export default function DashboardPage() {
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5)
 
+      const upcomingReservations =
+        (((upcomingReservationsRes.data ?? []) as unknown) as {
+          id: string
+          customer_name: string
+          reservation_time: string
+          party_size: number
+          status: string
+          tables: { table_number: string }[] | { table_number: string } | null
+        }[]).map((r) => {
+          const tableValue = Array.isArray(r.tables) ? r.tables[0] : r.tables
+          return {
+            id: r.id,
+            customerName: r.customer_name,
+            reservationTime: r.reservation_time,
+            partySize: Number(r.party_size) || 0,
+            status: r.status,
+            tableNumber: tableValue?.table_number ?? null,
+          }
+        }) ?? []
+
       void loadDisplayStatus(tid)
 
       setState((prev) => ({
@@ -449,6 +497,7 @@ export default function DashboardPage() {
         daily,
         lowStock: lowStock.slice(0, 5),
         topSelling,
+        upcomingReservations,
       }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard data')
@@ -597,6 +646,49 @@ export default function DashboardPage() {
         totalReadyOrders={state.totalDisplayReadyOrders}
         totalUrgentOrders={state.totalDisplayUrgentOrders}
       />
+
+      {(userRole === 'owner' || userRole === 'manager') && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle>Reservation Calendar</CardTitle>
+                <CardDescription>View reservations by day, week, or month</CardDescription>
+              </div>
+              <Link
+                href="/dashboard/reservations/calendar"
+                className="shrink-0 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                Open Calendar
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {state.upcomingReservations.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No reservations in the next 24 hours</div>
+            ) : (
+              <div className="space-y-2">
+                {state.upcomingReservations.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between gap-4 text-sm">
+                    <div className="min-w-0">
+                      <Link href={`/dashboard/reservations/${r.id}`} className="truncate font-medium hover:underline">
+                        {r.customerName}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(r.reservationTime).toLocaleString()}
+                        {r.tableNumber ? ` · Table ${r.tableNumber}` : ''}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {r.partySize} · {r.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -76,8 +76,9 @@ async function updateReservation(formData: FormData) {
 export default async function EditReservationPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -99,7 +100,7 @@ export default async function EditReservationPage({
     supabase
       .from('reservations')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('tenant_id', userData.tenant_id)
       .single(),
     supabase
