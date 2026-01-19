@@ -185,7 +185,15 @@ export default function SaleDetailPage() {
   const parsedPaymentData = (() => {
     if (!sale) return null
     const value = sale.payment_data
-    if (!value || typeof value !== 'object') return null
+    if (!value) return null
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value) as PaymentData
+      } catch {
+        return null
+      }
+    }
+    if (typeof value !== 'object') return null
     return value as PaymentData
   })()
 

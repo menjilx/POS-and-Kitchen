@@ -76,15 +76,14 @@ export function PaymentModal({
 
   // Card Support Info
   const [cardRef, setCardRef] = useState("")
-  const [cardNotes, setCardNotes] = useState("")
+  const [paymentNotes, setPaymentNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [currentDate] = useState(() => format(new Date(), "M-d-yyyy h:mm a"))
 
-  const defaultDestinationId = kitchenDisplays[0]?.id ?? ""
   const effectiveDestinationId =
     kitchenDisplays.some((display) => display.id === selectedDestination)
       ? selectedDestination
-      : defaultDestinationId
+      : ""
 
   const availablePaymentMethods = useMemo(() => {
     const methods = tenantSettings.paymentMethods ?? []
@@ -182,7 +181,7 @@ export function PaymentModal({
       setReceiptData(null)
       setIsFirstInput(true)
       setCardRef("")
-      setCardNotes("")
+      setPaymentNotes("")
       setAttachmentName(null)
       setSelectedDestination("")
     }
@@ -190,6 +189,8 @@ export function PaymentModal({
 
   // Calculate change dynamically based on received amount and total
   const change = Math.max(0, (parseFloat(receivedAmount) || 0) - totalAmount)
+  const showTransactionDetails = ['card', 'ewallet', 'bank_transfer'].includes(paymentMethod)
+  const transactionRefLabel = paymentMethod === 'card' ? 'Transaction Reference / Auth Code' : 'Transaction Reference'
 
   const handleNumPadClick = (value: string) => {
     if (isFirstInput) {
@@ -224,10 +225,6 @@ export function PaymentModal({
         return
     }
 
-    if (kitchenDisplays.length > 0 && !effectiveDestinationId) {
-      return
-    }
-    
     // Append card details to a structured note if card
     // Note: This assumes onPaymentComplete can handle or we modify how we pass it.
     // Since we can't easily change the prop signature without breaking callers, 
@@ -256,7 +253,7 @@ export function PaymentModal({
       paymentMethod,
       paymentStatus: paymentMethod === 'house_account' ? 'pending' : 'paid',
       paymentRef: cardRef,
-      paymentNotes: cardNotes,
+      paymentNotes: paymentNotes,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
       currency: tenantSettings.currency || 'USD',
@@ -264,7 +261,7 @@ export function PaymentModal({
 
     const { orderNumber: resolvedOrderNumber } = await onPaymentComplete(paymentMethod, amount, paymentMethod === 'house_account', {
       ref: cardRef,
-      notes: cardNotes,
+      notes: paymentNotes,
       attachment: attachmentName,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
@@ -465,7 +462,7 @@ export function PaymentModal({
                 {kitchenDisplays.length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-base font-semibold">Send Order To</Label>
-                    <Select value={effectiveDestinationId} onValueChange={setSelectedDestination}>
+                    <Select value={selectedDestination} onValueChange={setSelectedDestination}>
                         <SelectTrigger className="w-full h-12 text-lg">
                             <SelectValue placeholder="Select Kitchen Display" />
                         </SelectTrigger>
@@ -492,6 +489,17 @@ export function PaymentModal({
                             ))}
                         </SelectContent>
                     </Select>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="payment-notes" className="text-base font-semibold">Notes</Label>
+                    <textarea
+                        id="payment-notes"
+                        placeholder="Optional notes..."
+                        value={paymentNotes}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPaymentNotes(e.target.value)}
+                        className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
+                    />
                 </div>
 
                 <div className="text-center py-4">
@@ -548,10 +556,10 @@ export function PaymentModal({
                     </div>
                 )}
 
-                {paymentMethod === 'card' && (
+                {showTransactionDetails && (
                     <div className="space-y-4 bg-muted/20 p-4 rounded-lg border">
                          <div className="space-y-2">
-                            <Label htmlFor="card-ref" className="text-xs font-medium text-muted-foreground">Transaction Reference / Auth Code</Label>
+                            <Label htmlFor="card-ref" className="text-xs font-medium text-muted-foreground">{transactionRefLabel}</Label>
                             <Input 
                                 id="card-ref" 
                                 placeholder="e.g. TXN-123456" 
@@ -561,17 +569,6 @@ export function PaymentModal({
                             />
                          </div>
                          
-                         <div className="space-y-2">
-                            <Label htmlFor="card-notes" className="text-xs font-medium text-muted-foreground">Payment Notes</Label>
-                            <textarea 
-                                id="card-notes" 
-                                placeholder="Optional notes..." 
-                                value={cardNotes}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCardNotes(e.target.value)}
-                                className="flex min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none"
-                            />
-                         </div>
-
                          <div className="space-y-2">
                             <Label className="text-xs font-medium text-muted-foreground">Attachment</Label>
                             <div className="flex items-center gap-2">
@@ -595,7 +592,7 @@ export function PaymentModal({
                 <Button 
                     className="w-full h-12 text-lg font-bold" 
                     onClick={handleProcessPayment}
-                    disabled={isLoading || (paymentMethod === 'cash' && (parseFloat(receivedAmount) || 0) < totalAmount) || (kitchenDisplays.length > 0 && !effectiveDestinationId)}
+                    disabled={isLoading || (paymentMethod === 'cash' && (parseFloat(receivedAmount) || 0) < totalAmount)}
                 >
                     {isLoading ? "Processing..." : `Pay ${formatCurrency(totalAmount, currency)}`}
                 </Button>

@@ -849,6 +849,18 @@ export default function POSPage() {
     }
   }
 
+  const removeCustomerId = <T extends Record<string, unknown>>(payload: T) => {
+    const next = { ...payload } as T & { customer_id?: unknown }
+    delete next.customer_id
+    return next
+  }
+
+  const isMissingCustomerColumn = (error: { message?: string; code?: string } | null) => {
+    if (!error) return false
+    const message = error.message?.toLowerCase() ?? ''
+    return error.code === '42703' || message.includes('customer_id')
+  }
+
   const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!tenantId || !user) throw new Error("No user or tenant")
@@ -877,37 +889,12 @@ export default function POSPage() {
       const paymentData = additionalData ?? {}
 
       if (activeSaleId) {
-          const { error: saleError } = await supabase
-            .from("sales")
-            .update({
-                total_amount: cartTotal.total,
-                payment_status: paymentStatus,
-                payment_method: normalizedPaymentMethod,
-                payment_notes: paymentNotes,
-                payment_data: paymentData,
-                notes: notes,
-                customer_id: currentSelectedCustomer?.id || null,
-                discount_amount: cartTotal.discount,
-                discount_name: selectedDiscountId === 'custom' 
-                    ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
-                    : discounts.find(d => d.id === selectedDiscountId)?.name,
-                tax_amount: cartTotal.tax,
-                table_id: tableId || null,
-                sale_type: orderType
-            })
-            .eq('id', activeSaleId)
-          
-          if (saleError) throw saleError
+          const { data: previousItems } = await supabase
+            .from("sale_items")
+            .select("menu_item_id, quantity, unit_price, total_price, notes")
+            .eq("sale_id", activeSaleId)
 
-          await supabase.from("sale_items").delete().eq("sale_id", activeSaleId)
-      } else {
-          const { data: saleData, error: saleError } = await supabase
-            .from("sales")
-            .insert({
-              tenant_id: tenantId,
-              order_number: orderNumber,
-              sale_type: orderType,
-              table_id: tableId || null,
+          const salePayload = {
               total_amount: cartTotal.total,
               payment_status: paymentStatus,
               payment_method: normalizedPaymentMethod,
@@ -920,31 +907,125 @@ export default function POSPage() {
                   ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
                   : discounts.find(d => d.id === selectedDiscountId)?.name,
               tax_amount: cartTotal.tax,
-              sale_date: new Date().toISOString().split('T')[0],
-              sale_time: new Date().toISOString(),
-              created_by: user.id
-            })
+              table_id: tableId || null,
+              sale_type: orderType
+          }
+          let { error: saleError } = await supabase
+            .from("sales")
+            .update(salePayload)
+            .eq('id', activeSaleId)
+          
+          if (saleError && isMissingCustomerColumn(saleError)) {
+            const { error: retryError } = await supabase
+              .from("sales")
+              .update(removeCustomerId(salePayload))
+              .eq('id', activeSaleId)
+            saleError = retryError
+          }
+          
+          if (saleError) throw saleError
+
+          await supabase.from("sale_items").delete().eq("sale_id", activeSaleId)
+
+          const saleItemsData = cartItems.map(i => {
+            const unitPrice = Number(i.item.selling_price) || 0
+            return {
+              sale_id: activeSaleId,
+              menu_item_id: i.item.id,
+              quantity: i.quantity,
+              unit_price: unitPrice,
+              total_price: unitPrice * i.quantity
+            }
+          })
+
+          if (saleItemsData.length === 0) {
+            throw new Error("No items to save")
+          }
+
+          const { error: itemsError } = await supabase
+            .from("sale_items")
+            .insert(saleItemsData)
+
+          if (itemsError) {
+            if (previousItems && previousItems.length > 0) {
+              await supabase
+                .from("sale_items")
+                .insert(previousItems.map(item => ({
+                  ...item,
+                  sale_id: activeSaleId
+                })))
+            }
+            throw itemsError
+          }
+      } else {
+          const salePayload = {
+            tenant_id: tenantId,
+            order_number: orderNumber,
+            sale_type: orderType,
+            table_id: tableId || null,
+            total_amount: cartTotal.total,
+            payment_status: paymentStatus,
+            payment_method: normalizedPaymentMethod,
+            payment_notes: paymentNotes,
+            payment_data: paymentData,
+            notes: notes,
+            customer_id: currentSelectedCustomer?.id || null,
+            discount_amount: cartTotal.discount,
+            discount_name: selectedDiscountId === 'custom' 
+                ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
+                : discounts.find(d => d.id === selectedDiscountId)?.name,
+            tax_amount: cartTotal.tax,
+            sale_date: new Date().toISOString().split('T')[0],
+            sale_time: new Date().toISOString(),
+            created_by: user.id
+          }
+          let { data: saleData, error: saleError } = await supabase
+            .from("sales")
+            .insert(salePayload)
             .select()
             .single()
+
+          if (saleError && isMissingCustomerColumn(saleError)) {
+            const retryResult = await supabase
+              .from("sales")
+              .insert(removeCustomerId(salePayload))
+              .select()
+              .single()
+            saleData = retryResult.data
+            saleError = retryResult.error
+          }
 
           if (saleError) throw saleError
           saleId = saleData.id
           setActiveSaleId(saleData.id)
+          
+          const saleItemsData = cartItems.map(i => {
+            const unitPrice = Number(i.item.selling_price) || 0
+            return {
+              sale_id: saleId,
+              menu_item_id: i.item.id,
+              quantity: i.quantity,
+              unit_price: unitPrice,
+              total_price: unitPrice * i.quantity
+            }
+          })
+
+          if (saleItemsData.length === 0) {
+            throw new Error("No items to save")
+          }
+
+          const { error: itemsError } = await supabase
+            .from("sale_items")
+            .insert(saleItemsData)
+
+          if (itemsError) {
+            await supabase
+              .from("sales")
+              .delete()
+              .eq("id", saleId)
+            throw itemsError
+          }
       }
-
-      const saleItemsData = cartItems.map(i => ({
-        sale_id: saleId,
-        menu_item_id: i.item.id,
-        quantity: i.quantity,
-        unit_price: i.item.selling_price,
-        total_price: i.item.selling_price * i.quantity
-      }))
-
-      const { error: itemsError } = await supabase
-        .from("sale_items")
-        .insert(saleItemsData)
-
-      if (itemsError) throw itemsError
       
       const { data: kdsOrder } = await supabase
         .from("kds_orders")

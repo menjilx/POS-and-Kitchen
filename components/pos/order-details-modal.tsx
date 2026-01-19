@@ -51,6 +51,7 @@ export function OrderDetailsModal({
   const [isLoading, setIsLoading] = useState(false)
   const [totalAmount, setTotalAmount] = useState(0)
   const [notes, setNotes] = useState<string | null>(null)
+  const [paymentNotes, setPaymentNotes] = useState<string | null>(null)
   const [orderDate, setOrderDate] = useState<string | null>(null)
 
   useEffect(() => {
@@ -62,13 +63,26 @@ export function OrderDetailsModal({
         // Fetch Sale Details (for notes/total)
         const { data: saleData, error: saleError } = await supabase
           .from('sales')
-          .select('total_amount, notes, sale_date, sale_time')
+          .select('total_amount, notes, sale_date, sale_time, payment_notes, payment_data')
           .eq('id', order.saleId)
           .single()
 
         if (saleError) throw saleError
         setTotalAmount(saleData.total_amount)
         setNotes(saleData.notes)
+        const rawPaymentData = saleData.payment_data
+        let parsedPaymentNotes: string | null = null
+        if (typeof rawPaymentData === 'string') {
+          try {
+            const parsed = JSON.parse(rawPaymentData) as { notes?: string }
+            parsedPaymentNotes = parsed.notes ?? null
+          } catch {
+            parsedPaymentNotes = null
+          }
+        } else if (rawPaymentData && typeof rawPaymentData === 'object') {
+          parsedPaymentNotes = (rawPaymentData as { notes?: string }).notes ?? null
+        }
+        setPaymentNotes(saleData.payment_notes ?? parsedPaymentNotes)
         setOrderDate(`${new Date(saleData.sale_date).toLocaleDateString()} ${new Date(saleData.sale_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
 
         // Fetch Items
@@ -105,6 +119,7 @@ export function OrderDetailsModal({
       setItems([])
       setTotalAmount(0)
       setNotes(null)
+      setPaymentNotes(null)
     }
   }, [isOpen, order])
 
@@ -184,6 +199,11 @@ export function OrderDetailsModal({
               <span>Total</span>
               <span>{formatCurrency(totalAmount, currency)}</span>
             </div>
+            {paymentNotes && (
+                <div className="mt-3 p-2 bg-sky-50 text-sky-800 text-xs rounded border border-sky-100">
+                    <span className="font-semibold">Payment Notes:</span> {paymentNotes}
+                </div>
+            )}
             {notes && (
                 <div className="mt-3 p-2 bg-yellow-50 text-yellow-800 text-xs rounded border border-yellow-100">
                     <span className="font-semibold">Note:</span> {notes}
