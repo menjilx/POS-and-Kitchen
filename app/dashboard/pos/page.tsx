@@ -358,7 +358,14 @@ export default function POSPage() {
     setIsProcessing(true)
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user || !tenantId) return
+      if (!user) {
+        toast({ title: "Authentication Required", description: "Please sign in again to open the register.", variant: "destructive" })
+        return
+      }
+      if (!tenantId) {
+        toast({ title: "No Tenant Found", description: "Unable to resolve tenant for this account.", variant: "destructive" })
+        return
+      }
 
       if (registerModalMode === 'open') {
         const { data: rpcResult, error: rpcError } = await supabase
@@ -370,7 +377,8 @@ export default function POSPage() {
           })
 
         if (rpcError) {
-          if (rpcError.message.includes('OPEN_SESSION_EXISTS') || rpcError.message.includes('already have an open register session')) {
+          const rpcMessage = rpcError.message || 'Failed to open register session'
+          if (rpcMessage.includes('OPEN_SESSION_EXISTS') || rpcMessage.includes('already have an open register session')) {
             await refreshPOSData()
             setShowRegisterModal(false)
             toast({ 
@@ -380,15 +388,16 @@ export default function POSPage() {
             })
             return
           }
-          throw rpcError
+          toast({ title: "Open Register Failed", description: rpcMessage, variant: "destructive" })
+          return
         }
 
         if (rpcResult && typeof rpcResult === 'object' && 'success' in rpcResult && !rpcResult.success) {
           await refreshPOSData()
           setShowRegisterModal(false)
           toast({ 
-            title: "Register Already Open", 
-            description: rpcResult.message || "You already have an open register session.",
+            title: "Open Register Failed", 
+            description: rpcResult.message || "Failed to open register session.",
             variant: "destructive" 
           })
           return
@@ -398,19 +407,38 @@ export default function POSPage() {
         setShowRegisterModal(false)
         toast({ title: "Register Opened", description: `Register opened with ${formatCurrency(amount)}` })
       } else {
-        if (!cashierSession) return
-        
-        const { error } = await supabase
-          .from('cashier_sessions')
-          .update({
-            closing_amount: amount,
-            closing_time: new Date().toISOString(),
-            status: 'closed',
-            notes: notes ? (cashierSession.notes ? `${cashierSession.notes}\nClosing Note: ${notes}` : `Closing Note: ${notes}`) : cashierSession.notes
+        const { data: closeResult, error: closeError } = await supabase
+          .rpc('close_cashier_session', {
+            p_user_id: user.id,
+            p_closing_amount: amount,
+            p_notes: notes
           })
-          .eq('id', cashierSession.id)
-        
-        if (error) throw error
+
+        if (closeError) {
+          if (closeError.message.includes('NO_OPEN_SESSION') || closeError.message.includes('No open register session')) {
+            await refreshPOSData()
+            setShowRegisterModal(false)
+            toast({ 
+              title: "No Open Register", 
+              description: "You don't have any open register session to close.",
+              variant: "destructive" 
+            })
+            return
+          }
+          throw closeError
+        }
+
+        if (closeResult && typeof closeResult === 'object' && 'success' in closeResult && !closeResult.success) {
+          await refreshPOSData()
+          setShowRegisterModal(false)
+          toast({ 
+            title: "No Open Register", 
+            description: closeResult.message || "You don't have any open register session to close.",
+            variant: "destructive" 
+          })
+          return
+        }
+
         await refreshPOSData()
         setShowRegisterModal(false)
         toast({ title: "Register Closed", description: `Register closed with ${formatCurrency(amount)}` })
@@ -421,7 +449,12 @@ export default function POSPage() {
       }
     } catch (error) {
       console.error(error)
-      toast({ title: "Error", description: "Failed to update register status", variant: "destructive" })
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Failed to update register status'
+      toast({ title: "Error", description: message, variant: "destructive" })
     } finally {
       setIsProcessing(false)
     }
