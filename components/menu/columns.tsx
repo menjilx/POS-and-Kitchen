@@ -63,6 +63,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
     header: () => {
       return <div className="text-right">Price</div>
     },
+    meta: { align: "right" },
     cell: ({ row }) => {
       return <div className="text-right">{formatCurrency(Number(row.getValue("selling_price")), currency)}</div>
     },
@@ -72,6 +73,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
     header: () => {
       return <div className="text-right">Cost</div>
     },
+    meta: { align: "right" },
     cell: ({ row }) => {
       return <div className="text-right">{formatCurrency(Number(row.getValue("total_cost")), currency)}</div>
     },
@@ -81,6 +83,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
     header: () => {
       return <div className="text-right">Margin</div>
     },
+    meta: { align: "right" },
     cell: ({ row }) => {
       const margin = Number(row.getValue("contribution_margin"))
       const sellingPrice = Number(row.original.selling_price)
@@ -100,6 +103,7 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
     header: () => {
       return <div className="text-center">Action</div>
     },
+    meta: { align: "center" },
     cell: ({ row }) => {
       return (
         <div className="text-center">

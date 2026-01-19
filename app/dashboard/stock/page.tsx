@@ -181,6 +181,10 @@ export default function StockPage() {
     setError('')
 
     try {
+      if (!adjustmentForm.ingredient_id || !adjustmentForm.location_id) {
+        throw new Error('Please select a stock item and location')
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
@@ -252,7 +256,7 @@ export default function StockPage() {
 
   const openAdjustmentModal = (stockItem: StockWithIngredient) => {
     setAdjustmentForm({
-      ingredient_id: stockItem.ingredients?.id || '',
+      ingredient_id: stockItem.ingredient_id,
       location_id: stockItem.location_id,
       adjustment_type: 'adjustment',
       quantity: '',

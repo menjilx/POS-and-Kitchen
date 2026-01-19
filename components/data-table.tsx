@@ -64,20 +64,32 @@ export function DataTable<TData, TValue>({
                   const headerElement = React.isValidElement<{ className?: string }>(headerContent)
                     ? headerContent
                     : null
-                  const isRightAligned =
-                    typeof headerElement?.props?.className === "string" &&
+                  const headerAlign =
+                    (header.column.columnDef.meta as { align?: "left" | "right" | "center" } | undefined)?.align ??
+                    (typeof headerElement?.props?.className === "string" &&
                     headerElement.props.className.includes("text-right")
+                      ? "right"
+                      : typeof headerElement?.props?.className === "string" &&
+                        headerElement.props.className.includes("text-center")
+                        ? "center"
+                        : "left")
+                  const isRightAligned = headerAlign === "right"
+                  const isCenterAligned = headerAlign === "center"
 
                   return (
                     <TableHead
                       key={header.id}
-                      className={cn(canSort && "cursor-pointer select-none")}
+                      className={cn(
+                        canSort && "cursor-pointer select-none",
+                        isCenterAligned && "text-center"
+                      )}
                       onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                     >
                       <div
                         className={cn(
                           "flex w-full items-center gap-1",
-                          isRightAligned && "justify-end"
+                          isRightAligned && "justify-end",
+                          isCenterAligned && "justify-center"
                         )}
                       >
                         {headerContent}
@@ -110,14 +122,27 @@ export function DataTable<TData, TValue>({
                     const cellElement = React.isValidElement<{ className?: string }>(cellContent)
                       ? cellContent
                       : null
-                    const isRightAligned =
-                      typeof cellElement?.props?.className === "string" &&
+                    const cellAlign =
+                      (cell.column.columnDef.meta as { align?: "left" | "right" | "center" } | undefined)?.align ??
+                      (typeof cellElement?.props?.className === "string" &&
                       cellElement.props.className.includes("text-right")
+                        ? "right"
+                        : typeof cellElement?.props?.className === "string" &&
+                          cellElement.props.className.includes("text-center")
+                          ? "center"
+                          : "left")
+                    const isRightAligned = cellAlign === "right"
+                    const isCenterAligned = cellAlign === "center"
 
                     return (
-                      <TableCell key={cell.id} className={cn(isRightAligned && "text-right")}>
+                      <TableCell
+                        key={cell.id}
+                        className={cn(isRightAligned && "text-right", isCenterAligned && "text-center")}
+                      >
                         {isRightAligned ? (
                           <div className="flex w-full justify-end">{cellContent}</div>
+                        ) : isCenterAligned ? (
+                          <div className="flex w-full justify-center">{cellContent}</div>
                         ) : (
                           cellContent
                         )}

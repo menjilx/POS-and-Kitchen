@@ -21,6 +21,7 @@ export default function StocktakePage() {
   const [error, setError] = useState('')
   const [locations, setLocations] = useState<Location[]>([])
   const [stocktakeCreated, setStocktakeCreated] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     loadLocations()
@@ -115,6 +116,11 @@ export default function StocktakePage() {
   }, [])
 
   const columns = useMemo(() => getColumns(updateActualQuantity), [updateActualQuantity])
+  const filteredStockItems = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return stockItems
+    return stockItems.filter((item) => item.ingredient_name.toLowerCase().includes(term))
+  }, [searchTerm, stockItems])
 
   const calculateVariance = () => {
     const positiveVariance = stockItems.reduce((sum, item) => {
@@ -313,7 +319,21 @@ export default function StocktakePage() {
 
       {stockItems.length > 0 && (
         <>
-          <DataTable columns={columns} data={stockItems} />
+          <div className="bg-card rounded-lg border p-4">
+            <label htmlFor="stock-search" className="block text-sm font-medium mb-2">
+              Search products
+            </label>
+            <input
+              id="stock-search"
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Type product name..."
+            />
+          </div>
+
+          <DataTable columns={columns} data={filteredStockItems} />
 
           <div className="bg-card rounded-lg border p-6 sticky bottom-6">
             <div className="flex items-center justify-between">
