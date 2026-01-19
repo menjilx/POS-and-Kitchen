@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState, useMemo, useRef } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 import { Search, Clock, LogOut, X, List } from "lucide-react"
-import type { MenuItem, SaleType, Customer, PaymentAdditionalData } from "@/types/database"
+import type { MenuItem, Table, SaleType, CashierSession, Customer, PaymentAdditionalData } from "@/types/database"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
 import { useOptimizedPOSData } from "@/hooks/use-optimized-pos-data"
 import { useToast } from "@/hooks/use-toast"
@@ -17,10 +17,11 @@ import { CategoryFilter } from "@/components/pos/category-filter"
 import { ProductGrid } from "@/components/pos/product-grid"
 import { OrderSidebar } from "@/components/pos/order-sidebar"
 import { RegisterModal, SessionSummary } from "@/components/pos/register-modal"
-import { HeldOrdersModal } from "@/components/pos/held-orders-modal"
+import { HeldOrdersModal, HeldOrder } from "@/components/pos/held-orders-modal"
 import { PaymentModal } from "@/components/pos/payment-modal"
 import { TransactionsModal, Transaction } from "@/components/pos/transactions-modal"
 import { OrderDetailsModal } from "@/components/pos/order-details-modal"
+import { format, formatDistanceToNow } from "date-fns"
 
 type CartItem = {
   item: MenuItem
@@ -37,6 +38,14 @@ type ActiveOrder = {
   status: OrderStatus
   tableNumber?: string
   assignedStation?: string | null
+}
+
+type Discount = {
+  id: string
+  name: string
+  type: 'percentage' | 'fixed'
+  value: number
+  is_active: boolean
 }
 
 type SaleReportItem = {
@@ -220,25 +229,133 @@ export default function POSPage() {
   const [tableId, setTableId] = useState("")
   const [currentOrderId, setCurrentOrderId] = useState("")
   const [activeSaleId, setActiveSaleId] = useState<string | null>(null)
-  const initialLoadCompleteRef = useRef(false)
+      const tablesRes = tablesResult.data
+      const kdsRes = kdsResult.data
+      const heldSales = heldSalesResult.data
 
-  useEffect(() => {
-    if (selectedCustomer) {
-      setCurrentSelectedCustomer(selectedCustomer)
-    }
-  }, [selectedCustomer])
+      if (walkInCandidates && walkInCandidates.length > 0) {
+        const normalizeName = (value: string) =>
+          value
+            .trim()
+            .toLowerCase()
+            .replace(/[-_]/g, ' ')
+            .replace(/\s+/g, ' ')
 
-  useEffect(() => {
-    if (isPosDataLoading) return
+        const isCanonical = (value: string) => normalizeName(value) === 'walk in'
+        const active = walkInCandidates.filter((c) => c.is_active !== false)
+        const candidates = active.length > 0 ? active : walkInCandidates
+        const canonical = candidates.find((c) => isCanonical(String(c.name ?? '')))
+        setSelectedCustomer((canonical ?? candidates[0]) as Customer)
+      }
 
-    if (!initialLoadCompleteRef.current) {
-      initialLoadCompleteRef.current = true
-      if (!cashierSession) {
+      if (displays) {
+        setKitchenDisplays(displays)
+      }
+
+      if (session) {
+        setCashierSession(session)
+      } else {
         setRegisterModalMode('open')
         setShowRegisterModal(true)
       }
+
+      if (tenantData?.settings && typeof tenantData.settings === 'object' && 'tax_rate' in tenantData.settings) {
+        setTaxRate(Number((tenantData.settings as { tax_rate?: unknown }).tax_rate) || 0)
+      }
+
+      if (discountsRes) setDiscounts(discountsRes as Discount[])
+
+      if (menuRes) {
+        setMenuItems(menuRes)
+        const uniqueCategories = Array.from(new Set(menuRes.map(i => i.category).filter(Boolean) as string[]))
+        setCategories(uniqueCategories)
+      }
+
+      if (tablesRes) setTables(tablesRes)
+
+      if (kdsRes && kdsRes.length > 0) {
+        const saleIds = kdsRes.map(k => k.sale_id)
+        const { data: salesRes } = await supabase
+          .from("sales")
+          .select("id, notes, tables(table_number)")
+          .in("id", saleIds)
+
+        const salesMap = new Map(salesRes?.map(s => [s.id, s]))
+
+        const orders: ActiveOrder[] = kdsRes.map(kds => {
+          const sale = salesMap.get(kds.sale_id)
+          let name = "Guest"
+          if (sale?.notes?.startsWith("Customer: ")) {
+            name = sale.notes.replace("Customer: ", "")
+          }
+
+          const tableData = sale?.tables as unknown as { table_number: string } | null
+          const tableNumber = tableData?.table_number
+
+          return {
+            id: kds.id,
+            saleId: kds.sale_id,
+            orderNumber: kds.order_number,
+            customerName: name,
+            status: kds.status as OrderStatus,
+            assignedStation: kds.assigned_station,
+            tableNumber: tableNumber ? String(tableNumber) : undefined,
+          }
+        })
+        setActiveOrders(orders)
+      } else {
+        setActiveOrders([])
+      }
+
+      if (heldSales) {
+        const saleIds = heldSales.map(s => s.id)
+        if (saleIds.length > 0) {
+          const { data: kdsStatus } = await supabase
+            .from("kds_orders")
+            .select("sale_id, status")
+            .in("sale_id", saleIds)
+
+          const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]))
+
+          const held: HeldOrder[] = heldSales.map(s => {
+            let name = "Guest"
+            if (s.notes?.startsWith("Customer: ")) {
+              name = s.notes.replace("Customer: ", "")
+              if (name.includes(" | Note: ")) {
+                name = name.split(" | Note: ")[0]
+              }
+            }
+            return {
+              id: s.id,
+              orderNumber: s.order_number,
+              customerName: name,
+              totalAmount: s.total_amount,
+              date: format(new Date(s.sale_time), "MMM-dd, yyyy h:mm a"),
+              time: `Wait: ${formatDistanceToNow(new Date(s.sale_time))}`,
+              itemsCount: s.sale_items?.reduce((acc: number, item: { quantity?: number | null }) => acc + (item.quantity || 0), 0) || 0,
+              status: statusMap.get(s.id),
+            }
+          })
+          setHeldOrders(held)
+        } else {
+          setHeldOrders([])
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Failed to load POS data',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    } finally {
+      hasLoadedOnceRef.current = true
+      if (showSkeleton) setIsPosDataLoading(false)
     }
-  }, [cashierSession, isPosDataLoading])
+  }, [toast])
+
+  useEffect(() => {
+    void loadData()
+  }, [loadData])
 
   // Poll for KDS updates
   useEffect(() => {
@@ -284,24 +401,22 @@ export default function POSPage() {
                 tableNumber: tableNumber ? String(tableNumber) : undefined,
               }
             })
-            activeOrdersRef.current = orders
+            setActiveOrders(orders)
         } else {
-            activeOrdersRef.current = []
+            setActiveOrders([])
         }
       } catch (err) {
         console.error("Error polling KDS:", err)
       }
     }
 
+    // Initial fetch
+    // void fetchKDSUpdates() // activeOrders is already set by loadData, but we could fetch again or just wait for interval
+
     const intervalId = setInterval(fetchKDSUpdates, 5000)
 
     return () => clearInterval(intervalId)
   }, [tenantId])
-
-  const activeOrdersRef = useRef(activeOrders)
-  useEffect(() => {
-    activeOrdersRef.current = activeOrders
-  }, [activeOrders])
 
   useEffect(() => {
     const ensureOrderNumber = async () => {
@@ -319,6 +434,8 @@ export default function POSPage() {
 
     void ensureOrderNumber()
   }, [tenantId, activeSaleId, currentOrderId])
+
+
 
   const filteredItems = useMemo(() => {
     return menuItems.filter(item => {
@@ -361,43 +478,25 @@ export default function POSPage() {
       if (!user || !tenantId) return
 
       if (registerModalMode === 'open') {
-        const { data: rpcResult, error: rpcError } = await supabase
-          .rpc('open_cashier_session', {
-            p_tenant_id: tenantId,
-            p_user_id: user.id,
-            p_opening_amount: amount,
-            p_notes: notes
+        const { data, error } = await supabase
+          .from('cashier_sessions')
+          .insert({
+            tenant_id: tenantId,
+            user_id: user.id,
+            opening_amount: amount,
+            notes: notes,
+            status: 'open',
+            opening_time: new Date().toISOString()
           })
-
-        if (rpcError) {
-          if (rpcError.message.includes('OPEN_SESSION_EXISTS') || rpcError.message.includes('already have an open register session')) {
-            await refreshPOSData()
-            setShowRegisterModal(false)
-            toast({ 
-              title: "Register Already Open", 
-              description: "You already have an open register session.",
-              variant: "destructive" 
-            })
-            return
-          }
-          throw rpcError
-        }
-
-        if (rpcResult && typeof rpcResult === 'object' && 'success' in rpcResult && !rpcResult.success) {
-          await refreshPOSData()
-          setShowRegisterModal(false)
-          toast({ 
-            title: "Register Already Open", 
-            description: rpcResult.message || "You already have an open register session.",
-            variant: "destructive" 
-          })
-          return
-        }
-
-        await refreshPOSData()
+          .select()
+          .single()
+        
+        if (error) throw error
+        setCashierSession(data)
         setShowRegisterModal(false)
         toast({ title: "Register Opened", description: `Register opened with ${formatCurrency(amount)}` })
       } else {
+        // Close register
         if (!cashierSession) return
         
         const { error } = await supabase
@@ -411,10 +510,11 @@ export default function POSPage() {
           .eq('id', cashierSession.id)
         
         if (error) throw error
-        await refreshPOSData()
+        setCashierSession(null)
         setShowRegisterModal(false)
         toast({ title: "Register Closed", description: `Register closed with ${formatCurrency(amount)}` })
         
+        // Re-open modal for next session
         setRegisterModalMode('open')
         setShowRegisterModal(true)
         setSessionSummary(null)
@@ -433,6 +533,7 @@ export default function POSPage() {
     setRegisterModalMode('close')
     setShowRegisterModal(true)
 
+    // Calculate session summary
     setIsProcessing(true)
     try {
         const toNumber = (value: unknown) => {
@@ -585,6 +686,7 @@ export default function POSPage() {
                   ? tableRel[0]?.table_number
                   : tableRel?.table_number
 
+                // Determine Status (Paid, Refunded, Void)
                 let status = s.payment_status
                 if (s.payment_status === 'refunded' && !s.payment_method) {
                     status = 'void'
@@ -630,6 +732,7 @@ export default function POSPage() {
           
           if (saleError) throw saleError
 
+          // Cancel KDS Order if exists
           const { data: kdsOrder } = await supabase
             .from('kds_orders')
             .select('id')
@@ -644,11 +747,11 @@ export default function POSPage() {
           }
 
           toast({ title: "Order Voided", description: `Order ${t.orderNumber} has been voided.` })
-          await refreshPOSData()
+          loadData() // Refresh data
       } catch (err) {
           console.error("Error voiding order:", err)
           toast({ title: "Error", description: "Failed to void order", variant: "destructive" })
-          throw err
+          throw err // Propagate to modal to show error there if needed
       }
   }
 
@@ -662,7 +765,7 @@ export default function POSPage() {
           if (error) throw error
 
           toast({ title: "Order Refunded", description: `Order ${t.orderNumber} has been refunded.` })
-          await refreshPOSData()
+          loadData() // Refresh data
       } catch (err) {
           console.error("Error refunding order:", err)
           toast({ title: "Error", description: "Failed to refund order", variant: "destructive" })
@@ -692,6 +795,7 @@ export default function POSPage() {
         }
     }
 
+    // Ensure discount doesn't exceed subtotal
     discountAmount = Math.min(discountAmount, subtotal)
     
     const taxableAmount = subtotal - discountAmount
@@ -726,7 +830,7 @@ export default function POSPage() {
 
        if (options?.holdAfterSend) {
          clearCart()
-         await refreshPOSData()
+         loadData()
        }
     } catch (err: unknown) {
         console.error("Error sending to kitchen:", JSON.stringify(err, null, 2))
@@ -745,6 +849,7 @@ export default function POSPage() {
         return
     }
 
+    // Handle Hold Order
     setIsProcessing(true)
     try {
        await saveOrder('pending')
@@ -755,7 +860,7 @@ export default function POSPage() {
        })
        
        clearCart()
-       await refreshPOSData()
+       loadData()
     } catch (err: unknown) {
         console.error("Error holding order:", JSON.stringify(err, null, 2))
         toast({ title: "Error", description: "Failed to hold order", variant: "destructive" })
@@ -780,7 +885,7 @@ export default function POSPage() {
 
       let saleId = activeSaleId
       
-      let notes = `Customer: ${currentSelectedCustomer?.name || 'Walk-in Customer'}${orderNote ? ` | Note: ${orderNote}` : ''}`
+      let notes = `Customer: ${selectedCustomer?.name || 'Walk-in Customer'}${orderNote ? ` | Note: ${orderNote}` : ''}`
       if (additionalData) {
           if (additionalData.ref) notes += ` | Ref: ${additionalData.ref}`
           if (additionalData.notes) notes += ` | PayNote: ${additionalData.notes}`
@@ -792,6 +897,7 @@ export default function POSPage() {
       const paymentData = additionalData ?? {}
 
       if (activeSaleId) {
+          // Update existing sale
           const { error: saleError } = await supabase
             .from("sales")
             .update({
@@ -801,8 +907,8 @@ export default function POSPage() {
                 payment_notes: paymentNotes,
                 payment_data: paymentData,
                 notes: notes,
-                customer_id: currentSelectedCustomer?.id || null,
-                discount_amount: cartTotal.discount,
+                customer_id: selectedCustomer?.id || null,
+            discount_amount: cartTotal.discount,
                 discount_name: selectedDiscountId === 'custom' 
                     ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
                     : discounts.find(d => d.id === selectedDiscountId)?.name,
@@ -814,8 +920,10 @@ export default function POSPage() {
           
           if (saleError) throw saleError
 
+          // Delete existing items
           await supabase.from("sale_items").delete().eq("sale_id", activeSaleId)
       } else {
+          // Create new sale
           const { data: saleData, error: saleError } = await supabase
             .from("sales")
             .insert({
@@ -829,11 +937,11 @@ export default function POSPage() {
               payment_notes: paymentNotes,
               payment_data: paymentData,
               notes: notes,
-              customer_id: currentSelectedCustomer?.id || null,
+              customer_id: selectedCustomer?.id || null,
               discount_amount: cartTotal.discount,
               discount_name: selectedDiscountId === 'custom' 
-                  ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
-                  : discounts.find(d => d.id === selectedDiscountId)?.name,
+                ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
+                : discounts.find(d => d.id === selectedDiscountId)?.name,
               tax_amount: cartTotal.tax,
               sale_date: new Date().toISOString().split('T')[0],
               sale_time: new Date().toISOString(),
@@ -847,6 +955,7 @@ export default function POSPage() {
           setActiveSaleId(saleData.id)
       }
 
+      // Insert Items
       const saleItemsData = cartItems.map(i => ({
         sale_id: saleId,
         menu_item_id: i.item.id,
@@ -861,6 +970,8 @@ export default function POSPage() {
 
       if (itemsError) throw itemsError
       
+      // Handle KDS (Robust implementation)
+      // Check if KDS order exists for this sale (it should be created by trigger on sales insert)
       const { data: kdsOrder } = await supabase
         .from("kds_orders")
         .select("id")
@@ -868,13 +979,16 @@ export default function POSPage() {
         .single()
         
       if (kdsOrder) {
+           // If destination provided, update station
            if (destination) {
                await supabase
                 .from("kds_orders")
                 .update({ assigned_station: destination })
                 .eq("id", kdsOrder.id)
-            }
+           }
 
+           // Ensure items are in KDS (Trigger might have missed them if sale_items weren't there yet)
+           // First delete existing to avoid duplicates if we are updating
            await supabase.from("kds_order_items").delete().eq("kds_order_id", kdsOrder.id)
            
            const kdsItemsData = cartItems.map(i => ({
@@ -882,10 +996,13 @@ export default function POSPage() {
                 menu_item_id: i.item.id,
                 quantity: i.quantity,
                 status: 'pending' as const
-             }))
-             await supabase.from("kds_order_items").insert(kdsItemsData)
+            }))
+            await supabase.from("kds_order_items").insert(kdsItemsData)
       } else {
-           console.warn("KDS Order not found for sale", saleId)
+          // Fallback if trigger failed (though it shouldn't)
+          // Manually create KDS order? 
+          // For now assume trigger works for creating the order shell.
+          console.warn("KDS Order not found for sale", saleId)
       } 
       
       if (!saleId) throw new Error('Failed to save sale')
@@ -911,7 +1028,7 @@ export default function POSPage() {
           })
           
           clearCart()
-          await refreshPOSData()
+          loadData()
 
           return result
       } catch (err) {
@@ -934,6 +1051,7 @@ export default function POSPage() {
             
           if (!sale) throw new Error("Order not found")
           
+          // Populate state
           setCurrentOrderId(sale.order_number)
           
           if (sale.customer_id) {
@@ -942,20 +1060,28 @@ export default function POSPage() {
               .select('*')
               .eq('id', sale.customer_id)
               .single()
-            if (customer) setCurrentSelectedCustomer(customer)
+            if (customer) setSelectedCustomer(customer)
           } else {
-            setCurrentSelectedCustomer(null)
+            setSelectedCustomer(null)
           }
 
           setTableId(sale.table_id || "")
           setOrderType(sale.sale_type as SaleType)
           setActiveSaleId(sale.id)
           
-          const items: CartItem[] = (sale.sale_items as { menu_items: MenuItem; quantity: number }[]).map((si) => ({
+          // Set Items
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const items: CartItem[] = sale.sale_items.map((si: any) => ({
               item: si.menu_items,
               quantity: si.quantity
           }))
           setCartItems(items)
+          
+          // Set Discount/Tax if possible (simplified)
+          // Note: Re-calculating discount might be tricky if it was custom.
+          // For now, we rely on current cartTotal calculation. 
+          // If the held order had specific discount/tax values, we might lose them if we don't store them in state properly.
+          // But we are recalculating based on items.
           
           setShowHeldOrders(false)
           toast({ title: "Order Resumed", description: `Resumed order ${sale.order_number}` })
@@ -969,7 +1095,7 @@ export default function POSPage() {
 
   const clearCart = () => {
     setCartItems([])
-    setCurrentSelectedCustomer(null)
+    setSelectedCustomer(null)
     setTableId("")
     setActiveSaleId(null)
     setCurrentOrderId("")
@@ -977,7 +1103,9 @@ export default function POSPage() {
 
   return (
     <div className="print:hidden absolute top-(--header-height) left-0 right-0 bottom-0 flex overflow-hidden bg-background md:rounded-b-xl">
+      {/* Left Content */}
       <div className="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
+        {/* Header / Search */}
         <div className="flex gap-4 mb-6">
             <Button variant="secondary" onClick={() => router.push('/dashboard')} className="gap-2 shrink-0">
                 <X className="h-4 w-4" />
@@ -1017,6 +1145,7 @@ export default function POSPage() {
           )}
         </div>
 
+        {/* Order Queue */}
         {isPosDataLoading ? (
           <OrderQueueSkeleton />
         ) : (
@@ -1027,7 +1156,9 @@ export default function POSPage() {
           />
         )}
 
+        {/* Main Content Scroll Area */}
         <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
+            {/* Categories */}
             {isPosDataLoading ? (
               <CategoryFilterSkeleton />
             ) : (
@@ -1038,6 +1169,7 @@ export default function POSPage() {
               />
             )}
 
+            {/* Product Grid */}
             {isPosDataLoading ? (
               <ProductGridSkeleton />
             ) : (
@@ -1059,6 +1191,7 @@ export default function POSPage() {
         </div>
       </div>
 
+      {/* Right Sidebar */}
       <div className="w-100 shrink-0 flex-col border-l bg-background hidden lg:flex">
         {isPosDataLoading || !currentOrderId ? (
           <OrderSidebarSkeleton />
@@ -1067,8 +1200,8 @@ export default function POSPage() {
             orderId={currentOrderId}
             orderType={orderType}
             setOrderType={setOrderType}
-            selectedCustomer={currentSelectedCustomer}
-            onSelectCustomer={setCurrentSelectedCustomer}
+            selectedCustomer={selectedCustomer}
+            onSelectCustomer={setSelectedCustomer}
             orderNote={orderNote}
             setOrderNote={setOrderNote}
             tableId={tableId}
@@ -1092,7 +1225,7 @@ export default function POSPage() {
             onSelectDiscount={setSelectedDiscountId}
             customDiscount={customDiscount}
             setCustomDiscount={setCustomDiscount}
-            onTaxChange={() => {}}
+            onTaxChange={setTaxRate}
             tenantId={tenantId}
             onSendToKitchen={handleSendToKitchen}
             kitchenDisplays={kitchenDisplays}
@@ -1135,7 +1268,7 @@ export default function POSPage() {
         onClose={() => setShowPaymentModal(false)}
         onPaymentComplete={handlePaymentComplete}
         totalAmount={cartTotal.total}
-        customerName={currentSelectedCustomer?.name || 'Walk-in Customer'}
+        customerName={selectedCustomer?.name || 'Walk-in Customer'}
         orderNumber={currentOrderId}
         items={cartItems.map(i => ({ name: i.item.name, quantity: i.quantity, price: i.item.selling_price }))}
         subtotal={cartTotal.subtotal}

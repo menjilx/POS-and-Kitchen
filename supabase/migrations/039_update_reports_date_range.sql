@@ -69,11 +69,11 @@ BEGIN
   ),
   ingredient_stats AS (
     SELECT 
-        ingredient_id,
-        SUM(quantity) as total_qty,
-        SUM(quantity * unit_price) as total_cost
-    FROM purchase_data
-    GROUP BY ingredient_id
+        pd.ingredient_id,
+        SUM(pd.quantity) as total_qty,
+        SUM(pd.quantity * pd.unit_price) as total_cost
+    FROM purchase_data pd
+    GROUP BY pd.ingredient_id
   ),
   ingredient_data AS (
     SELECT 

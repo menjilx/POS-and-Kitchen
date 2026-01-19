@@ -3,7 +3,13 @@
 -- 2. Create helper functions that are SECURITY DEFINER (bypass RLS)
 -- 3. Re-create policies using these functions
 
--- Drop policies explicitly mentioned in error messages first
+-- IMPORTANT: Drop policies that depend on the functions FIRST
+-- Policies from migration 016 that use get_current_user_tenant_id():
+DROP POLICY IF EXISTS "Owners can view tenant members" ON users;
+DROP POLICY IF EXISTS "Owners can update users" ON users;
+DROP POLICY IF EXISTS "Owners can delete users" ON users;
+
+-- Drop policies explicitly mentioned in error messages
 DROP POLICY IF EXISTS "Only owners can update users" ON users;
 DROP POLICY IF EXISTS "Only owners can delete users" ON users;
 DROP POLICY IF EXISTS "Users can view users in their tenant" ON users;
@@ -19,7 +25,7 @@ DROP POLICY IF EXISTS "Users can create their own profile" ON users;
 DROP POLICY IF EXISTS "Users can view their own tenant" ON tenants;
 DROP POLICY IF EXISTS "Allow public to create tenants" ON tenants;
 
--- Drop functions to ensure clean recreation
+-- Now it's safe to drop the functions
 DROP FUNCTION IF EXISTS get_current_user_tenant_id();
 DROP FUNCTION IF EXISTS is_current_user_owner();
 
