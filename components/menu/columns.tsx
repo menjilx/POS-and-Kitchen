@@ -4,6 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { ColumnDef } from "@tanstack/react-table"
 import { formatCurrency } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
 export interface MenuItem {
   id: string
@@ -14,9 +15,16 @@ export interface MenuItem {
   total_cost: number | string
   contribution_margin: number | string
   image_url?: string | null
+  item_type?: string | null
 }
 
-export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
+export const getColumns = (
+  currency: string,
+  options?: {
+    onDelete?: (item: MenuItem) => void
+    deletingId?: string | null
+  }
+): ColumnDef<MenuItem>[] => [
   {
     accessorKey: "name",
     header: "Name",
@@ -105,14 +113,26 @@ export const getColumns = (currency: string): ColumnDef<MenuItem>[] => [
     },
     meta: { align: "center" },
     cell: ({ row }) => {
+      const canDelete = Boolean(options?.onDelete)
+      const isDeleting = options?.deletingId === row.original.id
       return (
-        <div className="text-center">
+        <div className="text-center flex items-center justify-center gap-2">
           <Link
             href={`/dashboard/menu/${row.original.id}`}
             className="inline-block px-3 py-1.5 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 text-xs font-medium"
           >
             Edit
           </Link>
+          {canDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => options?.onDelete?.(row.original)}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          )}
         </div>
       )
     },

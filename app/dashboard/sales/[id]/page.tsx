@@ -21,7 +21,12 @@ import { normalizeReceiptSettings, PrintableReceipt, type ReceiptSettings } from
 
 type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded'
 type KdsOrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled'
-type PaymentMethod = 'cash' | 'card' | 'ewallet' | 'bank_transfer' | null
+type PaymentMethod = string | null
+
+type PaymentMethodOption = {
+  id: string
+  label: string
+}
 
 type PaymentData = {
   ref?: string
@@ -84,6 +89,13 @@ export default function SaleDetailPage() {
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings | null>(null)
   const [printingReceipt, setPrintingReceipt] = useState(false)
   const [stations, setStations] = useState<{ id: string; name: string }[]>([])
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([
+    { id: 'cash', label: 'Cash' },
+    { id: 'card', label: 'Credit/Debit Card' },
+    { id: 'house_account', label: 'House Account (In-house)' },
+    { id: 'ewallet', label: 'E-Wallet' },
+    { id: 'bank_transfer', label: 'Bank Transfer' },
+  ])
 
   useEffect(() => {
     const fetchSale = async () => {
@@ -110,9 +122,16 @@ export default function SaleDetailPage() {
         .eq('id', userData.tenant_id)
         .single()
       
-      const settings = tenantData?.settings as { currency?: string; receipt?: Partial<ReceiptSettings> } | null
+      const settings = tenantData?.settings as {
+        currency?: string
+        receipt?: Partial<ReceiptSettings>
+        paymentMethods?: PaymentMethodOption[]
+      } | null
       if (settings?.currency) setCurrency(settings.currency)
       setReceiptSettings(normalizeReceiptSettings(settings?.receipt))
+      if (Array.isArray(settings?.paymentMethods) && settings.paymentMethods.length > 0) {
+        setPaymentMethods(settings.paymentMethods)
+      }
 
       // Fetch Stations
       const { data: stationsData } = await supabase
@@ -170,6 +189,12 @@ export default function SaleDetailPage() {
     return value as PaymentData
   })()
 
+  const resolvePaymentMethodLabel = (method: PaymentMethod | null) => {
+    if (!method) return '-'
+    const fallback = method.replace(/_/g, ' ')
+    return paymentMethods.find((item) => item.id === method)?.label || fallback
+  }
+
   const updatePaymentStatus = async (nextStatus: PaymentStatus) => {
     if (!sale) return
     if (!tenantId) return
@@ -200,7 +225,7 @@ export default function SaleDetailPage() {
     if (!sale) return
     if (!tenantId) return
 
-    const nextMethod: PaymentMethod = nextValue === '__none__' ? null : (nextValue as PaymentMethod)
+    const nextMethod: PaymentMethod = nextValue === '__none__' ? null : nextValue
     if (nextMethod === sale.payment_method) return
 
     const previousMethod = sale.payment_method
@@ -223,6 +248,19 @@ export default function SaleDetailPage() {
 
     toast({ title: 'Updated', description: 'Payment method updated' })
   }
+
+  const availablePaymentMethods = (() => {
+    if (!sale?.payment_method) return paymentMethods
+    const exists = paymentMethods.some((method) => method.id === sale.payment_method)
+    if (exists) return paymentMethods
+    return [
+      ...paymentMethods,
+      {
+        id: sale.payment_method,
+        label: resolvePaymentMethodLabel(sale.payment_method),
+      },
+    ]
+  })()
 
   const updateKdsStatus = async (orderId: string, nextStatus: KdsOrderStatus) => {
     if (!sale) return
@@ -535,7 +573,7 @@ export default function SaleDetailPage() {
                         <p className="text-sm text-muted-foreground">Payment Method</p>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="capitalize">
-                            {sale.payment_method?.replace('_', ' ') || '-'}
+                            {resolvePaymentMethodLabel(sale.payment_method)}
                           </Badge>
                           <Select
                             value={sale.payment_method ?? '__none__'}
@@ -547,10 +585,11 @@ export default function SaleDetailPage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__none__">-</SelectItem>
-                              <SelectItem value="cash">cash</SelectItem>
-                              <SelectItem value="card">card</SelectItem>
-                              <SelectItem value="ewallet">ewallet</SelectItem>
-                              <SelectItem value="bank_transfer">bank transfer</SelectItem>
+                              {availablePaymentMethods.map((method) => (
+                                <SelectItem key={method.id} value={method.id}>
+                                  {method.label}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

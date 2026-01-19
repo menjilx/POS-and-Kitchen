@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { createPortal } from "react-dom"
 import {
   Dialog,
@@ -62,7 +62,7 @@ export function PaymentModal({
   kitchenDisplays = []
 }: PaymentModalProps) {
   const { settings: tenantSettings } = useTenantSettings()
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "house_account">("cash")
+  const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [receivedAmount, setReceivedAmount] = useState<string>("")
   const [showReceipt, setShowReceipt] = useState(false)
   const [selectedDestination, setSelectedDestination] = useState<string>("")
@@ -85,6 +85,14 @@ export function PaymentModal({
     kitchenDisplays.some((display) => display.id === selectedDestination)
       ? selectedDestination
       : defaultDestinationId
+
+  const availablePaymentMethods = useMemo(() => {
+    const methods = tenantSettings.paymentMethods ?? []
+    if (!paymentMethod) return methods
+    const exists = methods.some((method) => method.id === paymentMethod)
+    if (exists) return methods
+    return [...methods, { id: paymentMethod, label: paymentMethod.replace(/_/g, ' ') }]
+  }, [paymentMethod, tenantSettings.paymentMethods])
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -472,14 +480,16 @@ export function PaymentModal({
 
                 <div className="space-y-2">
                     <Label className="text-base font-semibold">Payment Method</Label>
-                    <Select value={paymentMethod} onValueChange={(v: "cash" | "card" | "house_account") => setPaymentMethod(v)}>
+                    <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value)}>
                         <SelectTrigger className="w-full h-12 text-lg">
                             <SelectValue placeholder="Select method" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="cash">Cash</SelectItem>
-                            <SelectItem value="card">Credit/Debit Card</SelectItem>
-                            <SelectItem value="house_account">House Account (In-house)</SelectItem>
+                            {availablePaymentMethods.map((method) => (
+                              <SelectItem key={method.id} value={method.id}>
+                                {method.label}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>

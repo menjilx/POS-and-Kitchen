@@ -220,6 +220,7 @@ export default function POSPage() {
   const [tableId, setTableId] = useState("")
   const [currentOrderId, setCurrentOrderId] = useState("")
   const [activeSaleId, setActiveSaleId] = useState<string | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const initialLoadCompleteRef = useRef(false)
 
   useEffect(() => {
@@ -227,6 +228,25 @@ export default function POSPage() {
       setCurrentSelectedCustomer(selectedCustomer)
     }
   }, [selectedCustomer])
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (data?.role) {
+        setCurrentUserRole(data.role)
+      }
+    }
+
+    void fetchRole()
+  }, [])
 
   useEffect(() => {
     if (isPosDataLoading) return
@@ -655,6 +675,10 @@ export default function POSPage() {
   }
 
   const handleVoid = async (t: Transaction) => {
+      if (currentUserRole !== 'owner' && currentUserRole !== 'manager') {
+          toast({ title: "Unauthorized", description: "Only admins can void orders", variant: "destructive" })
+          return
+      }
       try {
           const { error: saleError } = await supabase
               .from('sales')
@@ -686,6 +710,10 @@ export default function POSPage() {
   }
 
   const handleRefund = async (t: Transaction) => {
+      if (currentUserRole !== 'owner' && currentUserRole !== 'manager') {
+          toast({ title: "Unauthorized", description: "Only admins can refund orders", variant: "destructive" })
+          return
+      }
       try {
           const { error } = await supabase
               .from('sales')
@@ -701,6 +729,30 @@ export default function POSPage() {
           toast({ title: "Error", description: "Failed to refund order", variant: "destructive" })
           throw err
       }
+  }
+
+  const handleDeleteHeldOrder = async (orderId: string) => {
+    if (currentUserRole !== 'owner' && currentUserRole !== 'manager') {
+      toast({ title: "Unauthorized", description: "Only admins can delete orders", variant: "destructive" })
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this held order? This action cannot be undone.')) return
+
+    try {
+      const { error } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', orderId)
+
+      if (error) throw error
+
+      toast({ title: "Order Deleted", description: "Held order has been deleted." })
+      await refreshPOSData()
+    } catch (err) {
+      console.error("Error deleting held order:", err)
+      toast({ title: "Error", description: "Failed to delete held order", variant: "destructive" })
+    }
   }
 
   const cartTotal = useMemo(() => {
@@ -984,10 +1036,50 @@ export default function POSPage() {
           setOrderType(sale.sale_type as SaleType)
           setActiveSaleId(sale.id)
           
-          const items: CartItem[] = (sale.sale_items as { menu_items: MenuItem; quantity: number }[]).map((si) => ({
-              item: si.menu_items,
-              quantity: si.quantity
-          }))
+          const menuItemsById = new Map(menuItems.map(item => [item.id, item]))
+          const saleItemsFromSale = (sale.sale_items as Array<{
+            menu_item_id?: string | null
+            quantity?: number | null
+            menu_items?: MenuItem | null
+          }> | null) ?? []
+          let saleItems = saleItemsFromSale
+
+          if (saleItems.length === 0) {
+            const { data: saleItemsData } = await supabase
+              .from("sale_items")
+              .select("menu_item_id, quantity")
+              .eq("sale_id", saleId)
+            saleItems = saleItemsData ?? []
+          }
+
+          const missingIds = saleItems
+            .map(item => item.menu_item_id)
+            .filter((id): id is string => !!id && !menuItemsById.has(id))
+
+          const fetchedMenuItemsMap = new Map<string, MenuItem>()
+          if (missingIds.length > 0) {
+            const { data: fetchedMenuItems } = await supabase
+              .from("menu_items")
+              .select("*")
+              .in("id", missingIds)
+            for (const item of fetchedMenuItems ?? []) {
+              fetchedMenuItemsMap.set(item.id, item)
+            }
+          }
+
+          const items: CartItem[] = saleItems
+            .map((si) => {
+              const menuItem = si.menu_items
+                ?? (si.menu_item_id ? menuItemsById.get(si.menu_item_id) : undefined)
+                ?? (si.menu_item_id ? fetchedMenuItemsMap.get(si.menu_item_id) : undefined)
+              if (!menuItem) return null
+              return {
+                item: menuItem,
+                quantity: si.quantity ?? 0
+              }
+            })
+            .filter((item): item is CartItem => item !== null)
+
           setCartItems(items)
           
           setShowHeldOrders(false)
@@ -1150,6 +1242,8 @@ export default function POSPage() {
         onClose={() => setShowHeldOrders(false)}
         heldOrders={heldOrders}
         onResumeOrder={resumeOrder}
+        onDeleteOrder={handleDeleteHeldOrder}
+        canDelete={currentUserRole === 'owner' || currentUserRole === 'manager'}
         isLoading={isProcessing}
         currency={currencySymbol}
       />
@@ -1160,6 +1254,7 @@ export default function POSPage() {
         onRefund={handleRefund}
         onVoid={handleVoid}
         session={cashierSession}
+        canManageOrders={currentUserRole === 'owner' || currentUserRole === 'manager'}
         currency={currencySymbol}
       />
 

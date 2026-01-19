@@ -245,7 +245,7 @@ async function fetchActiveOrders(tenantId: string): Promise<ActiveOrder[]> {
 async function fetchHeldOrders(tenantId: string): Promise<HeldOrder[]> {
   const { data: heldSales, error: heldError } = await supabase
     .from("sales")
-    .select("*, sale_items(quantity)")
+    .select("*")
     .eq("tenant_id", tenantId)
     .eq("payment_status", "pending")
     .order("created_at", { ascending: false })
@@ -260,6 +260,18 @@ async function fetchHeldOrders(tenantId: string): Promise<HeldOrder[]> {
     .in("sale_id", saleIds)
 
   const statusMap = new Map(kdsStatus?.map(k => [k.sale_id, k.status]) || [])
+  const { data: saleItems } = await supabase
+    .from("sale_items")
+    .select("sale_id, quantity")
+    .in("sale_id", saleIds)
+
+  const itemsCountMap = new Map<string, number>()
+  if (saleItems) {
+    for (const item of saleItems) {
+      const count = itemsCountMap.get(item.sale_id) ?? 0
+      itemsCountMap.set(item.sale_id, count + (item.quantity || 0))
+    }
+  }
 
   return heldSales.map(s => {
     let name = "Guest"
@@ -276,7 +288,7 @@ async function fetchHeldOrders(tenantId: string): Promise<HeldOrder[]> {
       totalAmount: s.total_amount,
       date: format(new Date(s.sale_time), "MMM-dd, yyyy h:mm a"),
       time: `Wait: ${formatDistanceToNow(new Date(s.sale_time))}`,
-      itemsCount: s.sale_items?.reduce((acc: number, item: { quantity?: number | null }) => acc + (item.quantity || 0), 0) || 0,
+      itemsCount: itemsCountMap.get(s.id) ?? 0,
       status: statusMap.get(s.id),
     }
   })

@@ -58,6 +58,7 @@ interface TransactionsModalProps {
   onRefund: (sale: Transaction) => Promise<void>
   onVoid: (sale: Transaction) => Promise<void>
   session: CashierSession | null
+  canManageOrders?: boolean
   currency?: string
 }
 
@@ -67,6 +68,7 @@ export function TransactionsModal({
   onRefund,
   onVoid,
   session,
+  canManageOrders = false,
   currency = "$"
 }: TransactionsModalProps) {
   const { toast } = useToast()
@@ -158,6 +160,7 @@ export function TransactionsModal({
   }
 
   const handleAction = async (action: 'refund' | 'void', transaction: Transaction) => {
+    if (!canManageOrders) return
     if (!confirm(`Are you sure you want to ${action} this order? This action cannot be undone.`)) return
 
     setProcessingId(transaction.id)
@@ -290,32 +293,34 @@ export function TransactionsModal({
                     <span className="font-bold text-lg">
                       {formatCurrency(t.totalAmount, currency)}
                     </span>
-                    <div className="flex gap-2">
-                        {t.paymentStatus === 'paid' && (
-                            <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="h-7 text-xs border-red-200 hover:bg-red-50 hover:text-red-600"
-                                onClick={() => handleAction('refund', t)}
-                                disabled={!!processingId}
-                            >
-                                {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
-                                Return
-                            </Button>
-                        )}
-                        {t.paymentStatus === 'pending' && (
-                            <Button 
-                                size="sm" 
-                                variant="outline"
-                                className="h-7 text-xs border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-                                onClick={() => handleAction('void', t)}
-                                disabled={!!processingId}
-                            >
-                                {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3 mr-1" />}
-                                Void
-                            </Button>
-                        )}
-                    </div>
+                    {canManageOrders && (
+                      <div className="flex gap-2">
+                          {t.paymentStatus === 'paid' && (
+                              <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="h-7 text-xs border-red-200 hover:bg-red-50 hover:text-red-600"
+                                  onClick={() => handleAction('refund', t)}
+                                  disabled={!!processingId}
+                              >
+                                  {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
+                                  Return
+                              </Button>
+                          )}
+                          {t.paymentStatus === 'pending' && (
+                              <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="h-7 text-xs border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+                                  onClick={() => handleAction('void', t)}
+                                  disabled={!!processingId}
+                              >
+                                  {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3 mr-1" />}
+                                  Void
+                              </Button>
+                          )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))

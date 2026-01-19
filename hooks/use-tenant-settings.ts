@@ -10,6 +10,10 @@ export type TenantSettings = {
   features?: {
     menu?: boolean
   }
+  paymentMethods?: Array<{
+    id: string
+    label: string
+  }>
   receipt?: {
     showLogo: boolean
     logoUrl?: string
@@ -45,6 +49,13 @@ const defaultSettings: TenantSettings = {
   features: {
     menu: true,
   },
+  paymentMethods: [
+    { id: 'cash', label: 'Cash' },
+    { id: 'card', label: 'Credit/Debit Card' },
+    { id: 'house_account', label: 'House Account (In-house)' },
+    { id: 'ewallet', label: 'E-Wallet' },
+    { id: 'bank_transfer', label: 'Bank Transfer' },
+  ],
   receipt: {
     showLogo: false,
     headerText: 'SHOP NAME',
@@ -106,11 +117,15 @@ export function useTenantSettings(): UseTenantSettingsResult {
         const mergedFeatures = next.features
           ? { ...defaultSettings.features, ...next.features }
           : defaultSettings.features
+        const mergedPaymentMethods = Array.isArray(next.paymentMethods) && next.paymentMethods.length > 0
+          ? next.paymentMethods
+          : defaultSettings.paymentMethods
         setSettings({
           ...defaultSettings,
           ...next,
           features: mergedFeatures,
           receipt: mergedReceipt,
+          paymentMethods: mergedPaymentMethods,
         })
       } else {
         setSettings(defaultSettings)

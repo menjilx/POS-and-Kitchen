@@ -31,6 +31,8 @@ interface HeldOrdersModalProps {
   onClose: () => void
   heldOrders: HeldOrder[]
   onResumeOrder: (orderId: string) => void
+  onDeleteOrder?: (orderId: string) => void
+  canDelete?: boolean
   isLoading?: boolean
   currency?: string
 }
@@ -40,6 +42,8 @@ export function HeldOrdersModal({
   onClose,
   heldOrders,
   onResumeOrder,
+  onDeleteOrder,
+  canDelete = false,
   isLoading = false,
   currency = "$"
 }: HeldOrdersModalProps) {
@@ -115,13 +119,32 @@ export function HeldOrdersModal({
                     <span className="font-bold text-lg">
                       {formatCurrency(order.totalAmount, currency)}
                     </span>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      disabled={isLoading}
-                    >
-                      Resume
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {canDelete && onDeleteOrder && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={isLoading}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onDeleteOrder(order.id)
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isLoading}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onResumeOrder(order.id)
+                        }}
+                      >
+                        Resume
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))

@@ -13,6 +13,7 @@ import {
   Loader2,
   TicketPercent,
   Receipt as ReceiptIcon,
+  CreditCard,
   Upload,
   Copy,
   ExternalLink
@@ -29,6 +30,7 @@ interface TenantSettings {
   features?: {
     menu?: boolean
   }
+  paymentMethods?: PaymentMethodOption[]
   receipt?: ReceiptSettings
 }
 
@@ -47,6 +49,11 @@ interface Discount {
   is_active: boolean
 }
 
+interface PaymentMethodOption {
+  id: string
+  label: string
+}
+
 export default function SettingsPage() {
   const { toast } = useToast()
   const searchParams = useSearchParams()
@@ -59,6 +66,13 @@ export default function SettingsPage() {
     features: {
       menu: true,
     },
+    paymentMethods: [
+      { id: 'cash', label: 'Cash' },
+      { id: 'card', label: 'Credit/Debit Card' },
+      { id: 'house_account', label: 'House Account (In-house)' },
+      { id: 'ewallet', label: 'E-Wallet' },
+      { id: 'bank_transfer', label: 'Bank Transfer' },
+    ],
     receipt: {
       showLogo: false,
       headerText: 'SHOP NAME',
@@ -89,6 +103,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [tenantId, setTenantId] = useState<string | null>(null)
+  const [newPaymentMethodLabel, setNewPaymentMethodLabel] = useState('')
 
   const loadData = useCallback(async () => {
     try {
@@ -117,6 +132,9 @@ export default function SettingsPage() {
         setSettings(prev => ({
           ...prev,
           ...loadedSettings,
+          paymentMethods: Array.isArray(loadedSettings.paymentMethods) && loadedSettings.paymentMethods.length > 0
+            ? loadedSettings.paymentMethods
+            : prev.paymentMethods,
           features: {
             ...prev.features,
             ...loadedSettings.features,
@@ -167,7 +185,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab === 'general' || tab === 'kds' || tab === 'discounts') {
+    if (tab === 'general' || tab === 'kds' || tab === 'discounts' || tab === 'receipt' || tab === 'pos') {
       setActiveTab(tab)
     }
   }, [searchParams])
@@ -223,6 +241,56 @@ export default function SettingsPage() {
     if (withCurrent[0] !== 'UTC') return ['UTC', ...withCurrent.filter((z) => z !== 'UTC')]
     return withCurrent
   }, [settings.timezone])
+
+  const buildPaymentMethodId = (label: string, existingIds: Set<string>) => {
+    const base = label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+    if (!base) return ''
+
+    let candidate = base
+    let index = 2
+    while (existingIds.has(candidate)) {
+      candidate = `${base}_${index}`
+      index += 1
+    }
+    return candidate
+  }
+
+  const handleAddPaymentMethod = () => {
+    const label = newPaymentMethodLabel.trim()
+    if (!label) return
+
+    setSettings((prev) => {
+      const methods = prev.paymentMethods ?? []
+      const ids = new Set(methods.map((method) => method.id))
+      const id = buildPaymentMethodId(label, ids)
+      if (!id) return prev
+      return {
+        ...prev,
+        paymentMethods: [...methods, { id, label }],
+      }
+    })
+    setNewPaymentMethodLabel('')
+  }
+
+  const handleUpdatePaymentMethod = (id: string, label: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      paymentMethods: (prev.paymentMethods ?? []).map((method) =>
+        method.id === id ? { ...method, label } : method
+      ),
+    }))
+  }
+
+  const handleDeletePaymentMethod = (id: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      paymentMethods: (prev.paymentMethods ?? []).filter((method) => method.id !== id),
+    }))
+  }
 
   const handleSaveSettings = async () => {
     if (!tenantId) return
@@ -534,6 +602,17 @@ export default function SettingsPage() {
             >
               <ReceiptIcon size={20} />
               <span>Receipt</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('pos')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === 'pos'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <CreditCard size={20} />
+              <span>POS</span>
             </button>
           </nav>
         </div>
@@ -977,6 +1056,74 @@ export default function SettingsPage() {
                       }}
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab === 'pos' && (
+            <div className="bg-white rounded-lg border p-6 space-y-6">
+              <h2 className="text-xl font-bold text-slate-800">POS Settings</h2>
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <h3 className="text-base font-semibold">Payment Methods</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Manage payment methods available in POS and Sales.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="New payment method label"
+                    value={newPaymentMethodLabel}
+                    onChange={(e) => setNewPaymentMethodLabel(e.target.value)}
+                    className="flex-1 px-3 py-2 border rounded-md"
+                  />
+                  <button
+                    onClick={handleAddPaymentMethod}
+                    disabled={!newPaymentMethodLabel.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    <Plus size={16} />
+                    Add
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {(settings.paymentMethods ?? []).length === 0 ? (
+                    <div className="text-center py-6 text-slate-500">
+                      No payment methods configured.
+                    </div>
+                  ) : (
+                    (settings.paymentMethods ?? []).map((method) => (
+                      <div key={method.id} className="flex items-center gap-3 border rounded-lg p-3">
+                        <div className="flex-1">
+                          <input
+                            type="text"
+                            value={method.label}
+                            onChange={(e) => handleUpdatePaymentMethod(method.id, e.target.value)}
+                            className="w-full px-3 py-2 border rounded-md"
+                          />
+                          <div className="text-xs text-muted-foreground mt-1">{method.id}</div>
+                        </div>
+                        <button
+                          onClick={() => handleDeletePaymentMethod(method.id)}
+                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="pt-4">
+                  <button
+                    onClick={handleSaveSettings}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={16} />}
+                    Save Changes
+                  </button>
                 </div>
               </div>
             </div>
