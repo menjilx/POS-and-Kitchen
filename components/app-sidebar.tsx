@@ -20,7 +20,7 @@ import {
   Users,
 } from "lucide-react"
 
-import type { User as AppUser, UserRole } from "@/types/database"
+import type { User as AppUser } from "@/types/database"
 import {
   Sidebar,
   SidebarContent,
@@ -36,12 +36,14 @@ import {
 
 import { NavUser } from "@/components/nav-user"
 import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { supabase } from "@/lib/supabase/client"
+import { buildPermissionsByRole, PERMISSIONS, Permission } from "@/lib/permissions"
 
 type NavItem = {
   title: string
   url: string
   icon: React.ComponentType<{ className?: string }>
-  roles: UserRole[]
+  permission: Permission
 }
 
 type NavGroup = {
@@ -57,7 +59,7 @@ const navGroups: NavGroup[] = [
         title: "Dashboard",
         url: "/dashboard",
         icon: LayoutDashboard,
-        roles: ["owner", "manager", "staff"],
+        permission: PERMISSIONS.VIEW_DASHBOARD,
       },
     ],
   },
@@ -68,25 +70,25 @@ const navGroups: NavGroup[] = [
         title: "POS",
         url: "/dashboard/pos",
         icon: ShoppingCart,
-        roles: ["owner", "manager", "staff"],
+        permission: PERMISSIONS.OPERATIONS_POS,
       },
       {
         title: "Sales",
         url: "/dashboard/sales",
         icon: DollarSign,
-        roles: ["owner", "manager", "staff"],
+        permission: PERMISSIONS.OPERATIONS_SALES,
       },
       {
         title: "Reservations",
         url: "/dashboard/reservations",
         icon: Calendar,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.OPERATIONS_RESERVATIONS,
       },
       {
         title: "Customers",
         url: "/dashboard/customers",
         icon: Users,
-        roles: ["owner", "manager", "staff"],
+        permission: PERMISSIONS.OPERATIONS_CUSTOMERS,
       },
     ],
   },
@@ -97,19 +99,19 @@ const navGroups: NavGroup[] = [
         title: "Menu",
         url: "/dashboard/menu",
         icon: ShoppingBag,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.MENU_ITEMS,
       },
       {
         title: "Items",
         url: "/dashboard/items",
         icon: Package,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.MENU_ITEMS,
       },
       {
         title: "Tables",
         url: "/dashboard/tables",
         icon: Building2,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.MENU_TABLES,
       },
     ],
   },
@@ -120,31 +122,31 @@ const navGroups: NavGroup[] = [
         title: "Stock Items",
         url: "/dashboard/ingredients",
         icon: Package,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.INVENTORY_INGREDIENTS,
       },
       {
         title: "Stock Levels",
         url: "/dashboard/stock",
         icon: Package,
-        roles: ["owner", "manager", "staff"],
+        permission: PERMISSIONS.INVENTORY_STOCK,
       },
       {
         title: "Purchases",
         url: "/dashboard/purchases",
         icon: ShoppingCart,
-        roles: ["owner", "manager", "staff"],
+        permission: PERMISSIONS.INVENTORY_PURCHASES,
       },
       {
         title: "Suppliers",
         url: "/dashboard/suppliers",
         icon: Truck,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.INVENTORY_SUPPLIERS,
       },
       {
         title: "Locations",
         url: "/dashboard/locations",
         icon: MapPin,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.INVENTORY_LOCATIONS,
       },
     ],
   },
@@ -155,19 +157,19 @@ const navGroups: NavGroup[] = [
         title: "Expenses",
         url: "/dashboard/expenses",
         icon: FileText,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.FINANCE_EXPENSES,
       },
       {
         title: "Reports",
         url: "/dashboard/reports",
         icon: FileText,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.FINANCE_REPORTS,
       },
       {
         title: "Register Sessions",
         url: "/dashboard/reports/registers",
         icon: FileText,
-        roles: ["owner", "manager"],
+        permission: PERMISSIONS.FINANCE_REGISTER_SESSIONS,
       },
     ],
   },
@@ -178,13 +180,13 @@ const navGroups: NavGroup[] = [
         title: "Users",
         url: "/dashboard/users",
         icon: Users,
-        roles: ["owner"],
+        permission: PERMISSIONS.CONFIG_USERS,
       },
       {
         title: "Settings",
         url: "/dashboard/settings",
         icon: SlidersHorizontal,
-        roles: ["owner"],
+        permission: PERMISSIONS.CONFIG_SETTINGS,
       },
     ],
   },
@@ -201,6 +203,37 @@ export function AppSidebar({
   const pathname = usePathname()
   const { settings, loading } = useTenantSettings()
   const menuEnabled = loading ? true : (settings.features?.menu ?? true)
+  const [permissionsByRole, setPermissionsByRole] = React.useState(() => buildPermissionsByRole())
+
+  React.useEffect(() => {
+    let active = true
+    const loadPermissions = async () => {
+      const { data } = await supabase
+        .from('role_permissions')
+        .select('role, permissions')
+        .eq('tenant_id', user.tenant_id)
+
+      if (!active) return
+      setPermissionsByRole(buildPermissionsByRole(data ?? []))
+    }
+
+    if (user?.tenant_id) {
+      loadPermissions()
+    }
+
+    return () => {
+      active = false
+    }
+  }, [user?.tenant_id])
+
+  const userPermissions = user.role === 'superadmin'
+    ? Object.values(PERMISSIONS)
+    : (permissionsByRole[user.role] ?? [])
+
+  const canAccess = (permission: Permission) => {
+    if (user.role === 'superadmin') return true
+    return userPermissions.includes(permission)
+  }
 
   return (
     <Sidebar {...props} collapsible="icon">
@@ -230,7 +263,7 @@ export function AppSidebar({
           .filter((group) => (menuEnabled ? true : group.label !== "Menu"))
           .map((group) => ({
             ...group,
-            items: group.items.filter((item) => item.roles.includes(user.role)),
+            items: group.items.filter((item) => canAccess(item.permission)),
           }))
           .filter((group) => group.items.length > 0)
           .map((group) => (

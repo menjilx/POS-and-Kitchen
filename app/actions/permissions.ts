@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { Permission, DEFAULT_ROLE_PERMISSIONS, ROLES, Role } from '@/lib/permissions'
+import { Permission, DEFAULT_ROLE_PERMISSIONS, ROLES, buildPermissionsByRole } from '@/lib/permissions'
 
 export async function getRolePermissions(tenantId: string) {
   const supabase = await createClient()
@@ -14,22 +14,20 @@ export async function getRolePermissions(tenantId: string) {
 
   if (error) {
     console.error('Error fetching permissions:', error)
-    return DEFAULT_ROLE_PERMISSIONS
+    return {
+      roles: Object.keys(DEFAULT_ROLE_PERMISSIONS),
+      permissionsByRole: DEFAULT_ROLE_PERMISSIONS
+    }
   }
 
-  // Start with defaults
-  const finalPermissions = { ...DEFAULT_ROLE_PERMISSIONS }
+  const permissionsByRole: Record<string, Permission[]> = buildPermissionsByRole(customPermissions)
 
-  // Apply overrides
-  customPermissions?.forEach((cp) => {
-    const roleKey = cp.role as Role
-    if (Object.values(ROLES).includes(roleKey)) {
-        // We need to tell TS that finalPermissions keys match ROLES
-        (finalPermissions as Record<Role, Permission[]>)[roleKey] = cp.permissions as Permission[]
-    }
-  })
+  const roles = Array.from(new Set([
+    ...Object.keys(permissionsByRole),
+    ...Object.values(ROLES),
+  ]))
 
-  return finalPermissions
+  return { roles, permissionsByRole }
 }
 
 export async function updateRolePermissions(role: string, permissions: Permission[]) {

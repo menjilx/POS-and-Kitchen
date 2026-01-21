@@ -6,6 +6,7 @@ export interface ReceiptSettings {
   showLogo: boolean
   logoUrl?: string
   headerText: string
+  receiptTitle: string
   address: string
   phoneNumber: string
   footerText: string
@@ -23,6 +24,7 @@ export interface ReceiptSettings {
 export const defaultReceiptSettings: ReceiptSettings = {
   showLogo: false,
   headerText: 'SHOP NAME',
+  receiptTitle: 'CASH RECEIPT',
   address: 'Address: Lorem Ipsum, 23-10\nTelp. 11223344',
   phoneNumber: '11223344',
   footerText: 'THANK YOU!',
@@ -93,7 +95,7 @@ export function buildReceiptText(settings: ReceiptSettings, data: ReceiptData) {
 
   add('')
   add('********************************')
-  add('CASH RECEIPT')
+  add((settings.receiptTitle || '').toUpperCase())
   add('********************************')
   add('')
 
@@ -125,7 +127,6 @@ export function buildReceiptText(settings: ReceiptSettings, data: ReceiptData) {
   if (settings.showChange && typeof data.receivedAmount === 'number') add(`Received: ${formatMoney(data.receivedAmount)}`)
   if (settings.showChange && typeof data.changeAmount === 'number' && data.changeAmount > 0) add(`Change: ${formatMoney(data.changeAmount)}`)
   if (data.paymentRef) add(`Ref: ${data.paymentRef}`)
-  if (data.paymentNotes) add(`Notes: ${data.paymentNotes}`)
   add('')
   if (settings.footerText) {
     settings.footerText.split('\n').forEach((l) => add(l.toUpperCase()))
@@ -181,7 +182,7 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
 
         <div className="text-center mb-2">
           <p className="mb-2">********************************</p>
-          <h2 className="text-lg font-bold uppercase">CASH RECEIPT</h2>
+          <h2 className="text-lg font-bold uppercase">{settings.receiptTitle}</h2>
           <p>********************************</p>
         </div>
 
@@ -287,12 +288,6 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
               <div className="flex justify-between">
                 <span>Ref</span>
                 <span className="text-right">{data.paymentRef}</span>
-              </div>
-           )}
-           {data.paymentNotes && (
-              <div className="flex justify-between">
-                <span>Notes</span>
-                <span className="text-right">{data.paymentNotes}</span>
               </div>
            )}
         </div>

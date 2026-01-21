@@ -178,9 +178,8 @@ function KDSContent() {
 
     if (sId && sId !== 'All') {
       // Logic for specific station ID
-      // Include direct ID match OR (if it's a "Kitchen" display, include unassigned/legacy kitchen orders)
       if (sName?.trim().toLowerCase().includes('kitchen')) {
-         query = query.or(`assigned_station.eq.${sId},assigned_station.is.null,assigned_station.ilike.*kitchen*`)
+         query = query.or(`assigned_station.eq.${sId},assigned_station.ilike.*kitchen*`)
       } else {
          query = query.or(`assigned_station.eq.${sId},assigned_station.eq.${sName}`) // Fallback to name match for legacy
       }
@@ -188,7 +187,7 @@ function KDSContent() {
         // Fallback for name only (legacy)
         const stationLower = sName.trim().toLowerCase()
         if (stationLower.includes('kitchen')) {
-            query = query.or('assigned_station.is.null,assigned_station.ilike.*kitchen*')
+            query = query.or('assigned_station.ilike.*kitchen*')
         } else {
             query = query.eq('assigned_station', sName)
         }

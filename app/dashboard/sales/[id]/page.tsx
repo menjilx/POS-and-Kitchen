@@ -7,6 +7,14 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { formatCurrency } from '@/lib/utils'
 import type { SaleItemWithDetails } from './columns'
 import {
@@ -42,6 +50,23 @@ type KdsOrder = {
   assigned_station: string | null
   started_at: string | null
   completed_at: string | null
+}
+
+type SaleHistoryEntry = {
+  id: string
+  action: string
+  details: unknown
+  created_at: string
+  created_by: string | null
+  created_by_user: {
+    id: string
+    email: string
+    full_name: string | null
+  } | { 
+    id: string
+    email: string
+    full_name: string | null
+  }[] | null
 }
 
 type SaleDetail = {
@@ -83,12 +108,17 @@ export default function SaleDetailPage() {
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState('USD')
   const [tenantId, setTenantId] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [updatingPaymentStatus, setUpdatingPaymentStatus] = useState(false)
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false)
   const [updatingKdsOrderId, setUpdatingKdsOrderId] = useState<string | null>(null)
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings | null>(null)
   const [printingReceipt, setPrintingReceipt] = useState(false)
   const [stations, setStations] = useState<{ id: string; name: string }[]>([])
+  const [saleHistory, setSaleHistory] = useState<SaleHistoryEntry[]>([])
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [deletingSale, setDeletingSale] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([
     { id: 'cash', label: 'Cash' },
     { id: 'card', label: 'Credit/Debit Card' },
@@ -108,12 +138,13 @@ export default function SaleDetailPage() {
 
       const { data: userData } = await supabase
         .from('users')
-        .select('tenant_id')
+        .select('tenant_id, role')
         .eq('id', user.id)
         .single()
 
       if (!userData) return
       setTenantId(userData.tenant_id)
+      setUserRole(userData.role)
 
       // Fetch Tenant Settings
       const { data: tenantData } = await supabase
@@ -166,6 +197,20 @@ export default function SaleDetailPage() {
       } else {
         setSale(saleData as unknown as SaleDetail)
       }
+
+      const { data: historyData, error: historyError } = await supabase
+        .from('sale_history')
+        .select('id, action, details, created_at, created_by, created_by_user:users!sale_history_created_by_fkey (id, email, full_name)')
+        .eq('sale_id', id)
+        .eq('tenant_id', userData.tenant_id)
+        .order('created_at', { ascending: false })
+
+      if (historyError) {
+        console.error('Error fetching sale history:', historyError)
+      } else {
+        setSaleHistory((historyData ?? []) as SaleHistoryEntry[])
+      }
+      setHistoryLoading(false)
       setLoading(false)
     }
 
@@ -309,11 +354,47 @@ export default function SaleDetailPage() {
           kds_orders: current.kds_orders.map((o) => (o.id === orderId ? currentOrder : o)),
         }
       })
-      toast({ title: 'Error', description: 'Failed to update kitchen status', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to update display status', variant: 'destructive' })
       return
     }
 
-    toast({ title: 'Updated', description: 'Kitchen status updated' })
+    toast({ title: 'Updated', description: 'Display status updated' })
+  }
+
+  const canDelete = userRole === 'owner' || userRole === 'manager'
+
+  const handleDeleteSale = async () => {
+    if (!sale || !tenantId) return
+    setDeletingSale(true)
+    try {
+      const { data: deletedRows, error } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', sale.id)
+        .eq('tenant_id', tenantId)
+        .select('id')
+
+      if (error) throw error
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error('No rows deleted. Check permissions or record availability.')
+      }
+
+      toast({ title: 'Sale deleted', description: `Order ${sale.order_number} was deleted.` })
+      setDeleteDialogOpen(false)
+      router.push('/dashboard/sales')
+      router.refresh()
+    } catch (err) {
+      const errorDetails =
+        err && typeof err === 'object'
+          ? Object.fromEntries(Object.getOwnPropertyNames(err).map((key) => [key, (err as Record<string, unknown>)[key]]))
+          : err
+      console.error('Delete sale failed', errorDetails)
+      const errorLike = err as { message?: string; details?: string; hint?: string; code?: string } | null
+      const message =
+        (errorLike?.message || errorLike?.details || errorLike?.hint || errorLike?.code) ?? 'Failed to delete sale'
+      toast({ title: 'Error', description: message, variant: 'destructive' })
+      setDeletingSale(false)
+    }
   }
 
   if (loading) {
@@ -328,8 +409,89 @@ export default function SaleDetailPage() {
 
   const subtotal = sale.total_amount - sale.tax_amount + sale.discount_amount
 
+  const resolveHistoryActor = (entry: SaleHistoryEntry) => {
+    const user = Array.isArray(entry.created_by_user) ? entry.created_by_user[0] : entry.created_by_user
+    if (user?.full_name) return user.full_name
+    if (user?.email) return user.email
+    if (entry.created_by) return entry.created_by
+    return 'System'
+  }
+
+  const resolveHistoryAction = (action: string) => {
+    if (action === 'created') return 'Order created'
+    if (action === 'updated') return 'Order updated'
+    if (action === 'deleted') return 'Order deleted'
+    if (action === 'refunded') return 'Order refunded'
+    return action.replace(/_/g, ' ')
+  }
+
+  const formatHistoryValue = (key: string, value: unknown) => {
+    if (value === null || value === undefined || value === '') return '-'
+    if (key === 'payment_method') return resolvePaymentMethodLabel(value as PaymentMethod)
+    if (key === 'payment_status') return String(value)
+    if (key === 'total_amount' || key === 'discount_amount' || key === 'tax_amount') {
+      const numericValue = typeof value === 'number' ? value : Number(value)
+      return Number.isNaN(numericValue) ? '-' : formatCurrency(numericValue, currency)
+    }
+    if (key === 'sale_type') return String(value).replace(/_/g, ' ')
+    return String(value)
+  }
+
+  const resolveHistoryChanges = (entry: SaleHistoryEntry) => {
+    const details = entry.details as { old?: Record<string, unknown>; new?: Record<string, unknown> } | null
+    const oldRow = details?.old ?? null
+    const newRow = details?.new ?? null
+    const keysToTrack = ['payment_status', 'payment_method', 'total_amount', 'discount_amount', 'tax_amount', 'sale_type']
+
+    if (entry.action === 'created' && newRow) {
+      return `Total ${formatHistoryValue('total_amount', newRow.total_amount)}`
+    }
+    if (entry.action === 'deleted' && oldRow) {
+      return `Total ${formatHistoryValue('total_amount', oldRow.total_amount)}`
+    }
+    if (entry.action === 'refunded') {
+      return 'Payment status set to refunded'
+    }
+    if (!oldRow || !newRow) return null
+
+    const changes = keysToTrack
+      .filter((key) => oldRow[key] !== newRow[key])
+      .map((key) => {
+        const label = key
+          .replace(/_/g, ' ')
+          .replace(/\b\w/g, (char) => char.toUpperCase())
+        return `${label}: ${formatHistoryValue(key, oldRow[key])} → ${formatHistoryValue(key, newRow[key])}`
+      })
+
+    return changes.length > 0 ? changes.join(', ') : null
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && deletingSale) return
+          setDeleteDialogOpen(open)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Sale</DialogTitle>
+            <DialogDescription>
+              Delete order {sale.order_number}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deletingSale}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteSale} disabled={deletingSale}>
+              {deletingSale ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {receiptSettings && (
         <div className="block fixed -left-625 top-0 z-9999 bg-white p-0 m-0 w-full h-full overflow-hidden print:left-0 print:inset-0">
           <PrintableReceipt
@@ -370,9 +532,16 @@ export default function SaleDetailPage() {
           <Badge variant={sale.payment_status === 'paid' ? 'default' : 'secondary'} className="ml-2 capitalize">
             {sale.payment_status}
           </Badge>
-          <Button variant="outline" className="ml-auto" onClick={() => setPrintingReceipt(true)} disabled={!receiptSettings}>
+          <div className="ml-auto flex items-center gap-2">
+            {canDelete ? (
+              <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)} disabled={deletingSale}>
+                Delete
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setPrintingReceipt(true)} disabled={!receiptSettings}>
             Print Receipt
-          </Button>
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -438,7 +607,7 @@ export default function SaleDetailPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Kitchen Status</CardTitle>
+                <CardTitle>Display Status</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {sale.kds_orders && sale.kds_orders.length > 0 ? (
@@ -464,7 +633,7 @@ export default function SaleDetailPage() {
                                         <span className="font-medium">
                                           {stations.find((s) => s.id === kds.assigned_station)?.name ||
                                             kds.assigned_station ||
-                                            'Kitchen'}
+                                            'No Display'}
                                         </span>
                                         {duration && <span className="text-xs text-muted-foreground">Prep: {duration}</span>}
                                     </div>
@@ -503,6 +672,34 @@ export default function SaleDetailPage() {
                         <p className="text-muted-foreground">No kitchen orders found.</p>
                     )}
                 </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Sale History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {historyLoading ? (
+                  <p className="text-muted-foreground">Loading history...</p>
+                ) : saleHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    {saleHistory.map((entry) => {
+                      const changes = resolveHistoryChanges(entry)
+                      return (
+                        <div key={entry.id} className="flex items-start justify-between gap-4 border-b pb-3 last:border-0 last:pb-0">
+                          <div>
+                            <p className="font-medium">{resolveHistoryAction(entry.action)}</p>
+                            {changes && <p className="text-xs text-muted-foreground">{changes}</p>}
+                            <p className="text-xs text-muted-foreground">{resolveHistoryActor(entry)}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{new Date(entry.created_at).toLocaleString()}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">No history entries yet.</p>
+                )}
+              </CardContent>
             </Card>
         </div>
 

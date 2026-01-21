@@ -4,7 +4,7 @@ export const ROLES = {
   STAFF: 'staff',
 } as const;
 
-export type Role = typeof ROLES[keyof typeof ROLES];
+export type Role = string;
 
 // Expanded Permissions List based on application structure
 export const PERMISSIONS = {
@@ -14,6 +14,9 @@ export const PERMISSIONS = {
   // Operations
   OPERATIONS_POS: 'operations_pos',
   OPERATIONS_SALES: 'operations_sales',
+  OPERATIONS_SALES_VOID: 'operations_sales_void',
+  OPERATIONS_SALES_DELETE: 'operations_sales_delete',
+  OPERATIONS_SALES_HISTORY: 'operations_sales_history',
   OPERATIONS_RESERVATIONS: 'operations_reservations',
   OPERATIONS_CUSTOMERS: 'operations_customers',
   
@@ -39,11 +42,15 @@ export const PERMISSIONS = {
 } as const;
 
 export type Permission = typeof PERMISSIONS[keyof typeof PERMISSIONS];
+export type RolePermissionRow = { role: string; permissions: Permission[] }
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.VIEW_DASHBOARD]: 'View Dashboard',
   [PERMISSIONS.OPERATIONS_POS]: 'Access POS',
   [PERMISSIONS.OPERATIONS_SALES]: 'View Sales',
+  [PERMISSIONS.OPERATIONS_SALES_VOID]: 'Void Sales',
+  [PERMISSIONS.OPERATIONS_SALES_DELETE]: 'Delete Sales',
+  [PERMISSIONS.OPERATIONS_SALES_HISTORY]: 'View Sales History',
   [PERMISSIONS.OPERATIONS_RESERVATIONS]: 'Manage Reservations',
   [PERMISSIONS.OPERATIONS_CUSTOMERS]: 'Manage Customers',
   [PERMISSIONS.MENU_ITEMS]: 'Manage Menu Items',
@@ -67,6 +74,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     PERMISSIONS.VIEW_DASHBOARD,
     PERMISSIONS.OPERATIONS_POS,
     PERMISSIONS.OPERATIONS_SALES,
+    PERMISSIONS.OPERATIONS_SALES_VOID,
+    PERMISSIONS.OPERATIONS_SALES_DELETE,
+    PERMISSIONS.OPERATIONS_SALES_HISTORY,
     PERMISSIONS.OPERATIONS_RESERVATIONS,
     PERMISSIONS.OPERATIONS_CUSTOMERS,
     PERMISSIONS.MENU_ITEMS,
@@ -86,11 +96,31 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 };
 
+export const buildPermissionsByRole = (customPermissions?: RolePermissionRow[] | null) => {
+  const permissionsByRole: Record<string, Permission[]> = {
+    [ROLES.OWNER]: [...DEFAULT_ROLE_PERMISSIONS[ROLES.OWNER]],
+    [ROLES.MANAGER]: [...DEFAULT_ROLE_PERMISSIONS[ROLES.MANAGER]],
+    [ROLES.STAFF]: [...DEFAULT_ROLE_PERMISSIONS[ROLES.STAFF]],
+  }
+
+  customPermissions?.forEach((permissionRow) => {
+    const role = permissionRow.role
+    if (!role || role === ROLES.OWNER) return
+    const permissions = Array.isArray(permissionRow.permissions) ? permissionRow.permissions : []
+    permissionsByRole[role] = permissions
+  })
+
+  return permissionsByRole
+}
+
 export const PERMISSION_GROUPS = {
   'Overview': [PERMISSIONS.VIEW_DASHBOARD],
   'Operations': [
     PERMISSIONS.OPERATIONS_POS,
     PERMISSIONS.OPERATIONS_SALES,
+    PERMISSIONS.OPERATIONS_SALES_VOID,
+    PERMISSIONS.OPERATIONS_SALES_DELETE,
+    PERMISSIONS.OPERATIONS_SALES_HISTORY,
     PERMISSIONS.OPERATIONS_RESERVATIONS,
     PERMISSIONS.OPERATIONS_CUSTOMERS
   ],

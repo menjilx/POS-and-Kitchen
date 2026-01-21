@@ -9,10 +9,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Loader2, User, MapPin } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface OrderDetailsModalProps {
   isOpen: boolean
@@ -41,18 +43,23 @@ type OrderItem = {
   }
 }
 
+type OrderStatus = "ready" | "preparing" | "pending" | "served" | "cancelled"
+
 export function OrderDetailsModal({
   isOpen,
   onClose,
   order,
   currency = "$"
 }: OrderDetailsModalProps) {
+  const { toast } = useToast()
   const [items, setItems] = useState<OrderItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [totalAmount, setTotalAmount] = useState(0)
   const [notes, setNotes] = useState<string | null>(null)
   const [paymentNotes, setPaymentNotes] = useState<string | null>(null)
   const [orderDate, setOrderDate] = useState<string | null>(null)
+  const [currentStatus, setCurrentStatus] = useState<OrderStatus>("pending")
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
 
   useEffect(() => {
     async function fetchOrderDetails() {
@@ -123,14 +130,55 @@ export function OrderDetailsModal({
     }
   }, [isOpen, order])
 
+  useEffect(() => {
+    if (order?.status) {
+      setCurrentStatus(order.status as OrderStatus)
+    }
+  }, [order?.id, order?.status])
+
   if (!order) return null
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "ready": return "bg-green-600 hover:bg-green-700"
-      case "in_kitchen": return "bg-orange-500 hover:bg-orange-600"
+      case "preparing": return "bg-orange-500 hover:bg-orange-600"
+      case "served": return "bg-blue-600 hover:bg-blue-700"
+      case "cancelled": return "bg-red-600 hover:bg-red-700"
       default: return "bg-yellow-500 hover:bg-yellow-600"
     }
+  }
+
+  const getStatusLabel = (status: string) =>
+    status.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())
+
+  const updateOrderStatus = async (nextStatus: OrderStatus) => {
+    if (!order) return
+    if (currentStatus === nextStatus) return
+
+    const previousStatus = currentStatus
+    const now = new Date().toISOString()
+    const updateData: { status: OrderStatus; started_at?: string; completed_at?: string } = { status: nextStatus }
+    if (nextStatus === "preparing") {
+      updateData.started_at = now
+    }
+    if (nextStatus === "ready" || nextStatus === "served" || nextStatus === "cancelled") {
+      updateData.completed_at = now
+    }
+
+    setCurrentStatus(nextStatus)
+    setIsUpdatingStatus(true)
+
+    const { error } = await supabase.from("kds_orders").update(updateData).eq("id", order.id)
+
+    setIsUpdatingStatus(false)
+
+    if (error) {
+      setCurrentStatus(previousStatus)
+      toast({ title: "Error", description: "Failed to update order status", variant: "destructive" })
+      return
+    }
+
+    toast({ title: "Updated", description: "Order status updated" })
   }
 
   return (
@@ -139,8 +187,8 @@ export function OrderDetailsModal({
         <DialogHeader>
           <div className="flex items-center justify-between mr-4">
             <DialogTitle className="text-xl">{order.orderNumber}</DialogTitle>
-            <Badge className={`${getStatusColor(order.status)} border-0`}>
-              {order.status === 'in_kitchen' ? 'Preparing' : (order.status === 'ready' ? 'Ready' : 'Pending')}
+            <Badge className={`${getStatusColor(currentStatus)} border-0`}>
+              {getStatusLabel(currentStatus)}
             </Badge>
           </div>
           <DialogDescription>
@@ -149,7 +197,6 @@ export function OrderDetailsModal({
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          {/* Customer & Location Info */}
           <div className="flex items-center justify-between text-sm p-3 bg-muted/50 rounded-lg">
              <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
@@ -163,6 +210,27 @@ export function OrderDetailsModal({
                    <span className="font-medium">Table {order.tableNumber}</span>
                 </div>
              )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Display Status</span>
+              <Badge className={`${getStatusColor(currentStatus)} border-0`}>
+                {getStatusLabel(currentStatus)}
+              </Badge>
+            </div>
+            <Select value={currentStatus} onValueChange={(value) => updateOrderStatus(value as OrderStatus)} disabled={isUpdatingStatus}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Set status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">pending</SelectItem>
+                <SelectItem value="preparing">preparing</SelectItem>
+                <SelectItem value="ready">ready</SelectItem>
+                <SelectItem value="served">served</SelectItem>
+                <SelectItem value="cancelled">cancelled</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-3">

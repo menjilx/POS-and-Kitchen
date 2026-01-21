@@ -54,15 +54,23 @@ type RolePermissions = Record<Role, Permission[]>
 export function UsersClient({ 
   users, 
   currentUser,
+  roles,
   rolePermissions
 }: { 
   users: User[], 
   currentUser: User,
+  roles: Role[],
   rolePermissions: RolePermissions
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [deletingUser, setDeletingUser] = useState<User | null>(null)
+  const orderedRoles = (() => {
+    const unique = Array.from(new Set(roles))
+    const baseOrder = [ROLES.OWNER, ROLES.MANAGER, ROLES.STAFF] as Role[]
+    const rest = unique.filter((role) => !baseOrder.includes(role)).sort()
+    return [...baseOrder.filter((role) => unique.includes(role)), ...rest]
+  })()
 
   const columns: ColumnDef<User>[] = [
     {
@@ -100,7 +108,7 @@ export function UsersClient({
       header: 'Last Login',
       cell: ({ row }) => {
         const date = row.getValue('last_login') as string
-        return date ? new Date(date).toLocaleDateString() : 'Never'
+        return date ? new Date(date).toLocaleString() : 'Never'
       },
     },
     {
@@ -175,11 +183,11 @@ export function UsersClient({
         </TabsContent>
         
         <TabsContent value="roles">
-          <PermissionsMatrix initialPermissions={rolePermissions} />
+          <PermissionsMatrix roles={orderedRoles} initialPermissions={rolePermissions} />
         </TabsContent>
       </Tabs>
 
-      <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} roles={orderedRoles} />
       
       {editingUser && (
         <EditUserDialog 
@@ -187,6 +195,7 @@ export function UsersClient({
           open={!!editingUser} 
           onOpenChange={(open) => !open && setEditingUser(null)} 
           currentUser={currentUser}
+          roles={orderedRoles}
         />
       )}
 
@@ -201,7 +210,7 @@ export function UsersClient({
   )
 }
 
-function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function InviteUserDialog({ open, onOpenChange, roles }: { open: boolean; onOpenChange: (open: boolean) => void; roles: Role[] }) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
@@ -243,7 +252,7 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
               <SelectContent>
-                {Object.values(ROLES).map((role) => (
+                {roles.map((role) => (
                   <SelectItem key={role} value={role} className="capitalize">
                     {role}
                   </SelectItem>
@@ -265,7 +274,7 @@ function InviteUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange:
   )
 }
 
-function EditUserDialog({ user, open, onOpenChange, currentUser }: { user: User; open: boolean; onOpenChange: (open: boolean) => void, currentUser: User }) {
+function EditUserDialog({ user, open, onOpenChange, currentUser, roles }: { user: User; open: boolean; onOpenChange: (open: boolean) => void, currentUser: User; roles: Role[] }) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const isSelf = user.id === currentUser.id
@@ -311,7 +320,7 @@ function EditUserDialog({ user, open, onOpenChange, currentUser }: { user: User;
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.values(ROLES).map((role) => (
+                {roles.map((role) => (
                   <SelectItem key={role} value={role} className="capitalize">
                     {role}
                   </SelectItem>
@@ -390,18 +399,31 @@ function DeleteUserDialog({ user, open, onOpenChange }: { user: User; open: bool
     )
 }
 
-function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePermissions }) {
+function PermissionsMatrix({ initialPermissions, roles }: { initialPermissions: RolePermissions; roles: Role[] }) {
   const { toast } = useToast()
-  const [permissions, setPermissions] = useState(initialPermissions)
+  const [permissions, setPermissions] = useState(() => {
+    return roles.reduce((acc, role) => {
+      acc[role] = initialPermissions[role] ?? []
+      return acc
+    }, { ...initialPermissions } as RolePermissions)
+  })
   const [loading, setLoading] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [newRoleName, setNewRoleName] = useState('')
+  const [addingRole, setAddingRole] = useState(false)
+
+  const orderedRoles = (() => {
+    const existing = Object.keys(permissions)
+    const baseOrder = [ROLES.OWNER, ROLES.MANAGER, ROLES.STAFF] as Role[]
+    const rest = existing.filter((role) => !baseOrder.includes(role)).sort()
+    return [...baseOrder.filter((role) => existing.includes(role)), ...rest]
+  })()
 
   const togglePermission = (role: Role, permission: Permission) => {
-    // Owner permissions are immutable
     if (role === ROLES.OWNER) return;
 
     setPermissions(prev => {
-      const rolePermissions = prev[role]
+      const rolePermissions = prev[role] ?? []
       const newRolePermissions = rolePermissions.includes(permission)
         ? rolePermissions.filter(p => p !== permission)
         : [...rolePermissions, permission]
@@ -417,14 +439,10 @@ function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePer
   const handleSave = async () => {
     setLoading(true)
     try {
-      // Save for Manager and Staff
-      // We process them sequentially or in parallel
-      const promises = [
-        updateRolePermissions(ROLES.MANAGER, permissions[ROLES.MANAGER]),
-        updateRolePermissions(ROLES.STAFF, permissions[ROLES.STAFF])
-      ]
-      
-      await Promise.all(promises)
+      const rolesToSave = orderedRoles.filter((role) => role !== ROLES.OWNER)
+      await Promise.all(
+        rolesToSave.map((role) => updateRolePermissions(role, permissions[role] ?? []))
+      )
       
       toast({ title: 'Permissions updated successfully', variant: 'default' })
       setHasChanges(false)
@@ -438,6 +456,34 @@ function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePer
   const discardChanges = () => {
     setPermissions(initialPermissions)
     setHasChanges(false)
+  }
+
+  const addRole = async () => {
+    const normalized = newRoleName.trim().toLowerCase().replace(/\s+/g, '_')
+    if (!normalized) {
+      toast({ title: 'Role name required', variant: 'destructive' })
+      return
+    }
+    if (normalized === ROLES.OWNER) {
+      toast({ title: 'Role name reserved', variant: 'destructive' })
+      return
+    }
+    if (permissions[normalized]) {
+      toast({ title: 'Role already exists', variant: 'destructive' })
+      return
+    }
+
+    setAddingRole(true)
+    try {
+      await updateRolePermissions(normalized, [])
+      setPermissions((prev) => ({ ...prev, [normalized]: [] }))
+      setNewRoleName('')
+      toast({ title: 'Role created', variant: 'default' })
+    } catch {
+      toast({ title: 'Error', description: 'Failed to create role', variant: 'destructive' })
+    } finally {
+      setAddingRole(false)
+    }
   }
 
   return (
@@ -461,13 +507,29 @@ function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePer
         )}
       </div>
 
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex-1">
+          <Label htmlFor="new-role">New Role</Label>
+          <Input
+            id="new-role"
+            placeholder="e.g. cashier"
+            value={newRoleName}
+            onChange={(event) => setNewRoleName(event.target.value)}
+            disabled={addingRole}
+          />
+        </div>
+        <Button type="button" onClick={addRole} disabled={addingRole} className="sm:mt-6">
+          {addingRole ? 'Adding...' : 'Add Role'}
+        </Button>
+      </div>
+
       <div className="rounded-md border bg-card">
         <div className="relative w-full overflow-auto">
           <table className="w-full caption-bottom text-sm">
             <thead className="[&_tr]:border-b">
               <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                 <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[40%]">Permission</th>
-                {Object.values(ROLES).map(role => (
+                {orderedRoles.map(role => (
                   <th key={role} className="h-12 px-4 text-center align-middle font-medium text-muted-foreground capitalize">
                     {role}
                   </th>
@@ -478,7 +540,7 @@ function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePer
               {Object.entries(PERMISSION_GROUPS).map(([group, groupPermissions]) => (
                 <Fragment key={group}>
                   <tr className="bg-muted/50">
-                    <td colSpan={4} className="p-2 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
+                    <td colSpan={orderedRoles.length + 1} className="p-2 px-4 font-semibold text-xs uppercase tracking-wider text-muted-foreground">
                       {group}
                     </td>
                   </tr>
@@ -487,8 +549,8 @@ function PermissionsMatrix({ initialPermissions }: { initialPermissions: RolePer
                       <td className="p-4 align-middle font-medium">
                         {PERMISSION_LABELS[permission as Permission]}
                       </td>
-                      {Object.values(ROLES).map(role => {
-                        const hasPermission = permissions[role].includes(permission as Permission)
+                      {orderedRoles.map(role => {
+                        const hasPermission = (permissions[role] ?? []).includes(permission as Permission)
                         const isOwner = role === ROLES.OWNER
                         
                         return (

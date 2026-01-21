@@ -51,6 +51,11 @@ export default function AdminLoginPage() {
           throw new Error('Access denied: Superadmin privileges required')
         }
 
+        const { error: lastLoginError } = await supabaseAdmin.rpc('update_last_login')
+        if (lastLoginError) {
+          console.error('Failed to update last login:', lastLoginError)
+        }
+
         toast({
           title: "Welcome back",
           description: "Logged in as Super Admin",

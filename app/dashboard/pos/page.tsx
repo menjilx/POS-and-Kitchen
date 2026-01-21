@@ -206,6 +206,7 @@ export default function POSPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<ActiveOrder | null>(null)
+  const [liveActiveOrders, setLiveActiveOrders] = useState<ActiveOrder[]>([])
 
   // Cashier Session State
   const [showRegisterModal, setShowRegisterModal] = useState(false)
@@ -260,6 +261,10 @@ export default function POSPage() {
     }
   }, [cashierSession, isPosDataLoading])
 
+  useEffect(() => {
+    setLiveActiveOrders(activeOrders)
+  }, [activeOrders])
+
   // Poll for KDS updates
   useEffect(() => {
     if (!tenantId) return
@@ -304,9 +309,9 @@ export default function POSPage() {
                 tableNumber: tableNumber ? String(tableNumber) : undefined,
               }
             })
-            activeOrdersRef.current = orders
+            setLiveActiveOrders(orders)
         } else {
-            activeOrdersRef.current = []
+            setLiveActiveOrders([])
         }
       } catch (err) {
         console.error("Error polling KDS:", err)
@@ -317,11 +322,6 @@ export default function POSPage() {
 
     return () => clearInterval(intervalId)
   }, [tenantId])
-
-  const activeOrdersRef = useRef(activeOrders)
-  useEffect(() => {
-    activeOrdersRef.current = activeOrders
-  }, [activeOrders])
 
   useEffect(() => {
     const ensureOrderNumber = async () => {
@@ -792,6 +792,17 @@ export default function POSPage() {
     return discounts.find(d => d.id === selectedDiscountId)?.name
   }, [selectedDiscountId, customDiscount, discounts])
 
+  const formatSupabaseError = (err: unknown) => {
+    const details =
+      err && typeof err === 'object'
+        ? Object.fromEntries(Object.getOwnPropertyNames(err).map((key) => [key, (err as Record<string, unknown>)[key]]))
+        : err
+    const errorLike = err as { message?: string; details?: string; hint?: string; code?: string } | null
+    const message =
+      (errorLike?.message || errorLike?.details || errorLike?.hint || errorLike?.code) ?? 'Unexpected error'
+    return { details, message }
+  }
+
   const handleSendToKitchen = async (destination?: string, options?: { holdAfterSend?: boolean }) => {
     if (!tenantId) return
     if (cartItems.length === 0) return
@@ -849,18 +860,6 @@ export default function POSPage() {
     }
   }
 
-  const removeCustomerId = <T extends Record<string, unknown>>(payload: T) => {
-    const next = { ...payload } as T & { customer_id?: unknown }
-    delete next.customer_id
-    return next
-  }
-
-  const isMissingCustomerColumn = (error: { message?: string; code?: string } | null) => {
-    if (!error) return false
-    const message = error.message?.toLowerCase() ?? ''
-    return error.code === '42703' || message.includes('customer_id')
-  }
-
   const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!tenantId || !user) throw new Error("No user or tenant")
@@ -884,147 +883,64 @@ export default function POSPage() {
           if (additionalData.attachment) notes += ` | Attach: ${additionalData.attachment}`
       }
 
-      const normalizedPaymentMethod = paymentMethod === 'house_account' ? null : paymentMethod
+      const normalizedPaymentMethod = paymentMethod
       const paymentNotes = additionalData?.notes ?? null
       const paymentData = additionalData ?? {}
 
-      if (activeSaleId) {
-          const { data: previousItems } = await supabase
-            .from("sale_items")
-            .select("menu_item_id, quantity, unit_price, total_price, notes")
-            .eq("sale_id", activeSaleId)
+      const resolvedDiscountName = selectedDiscountId === 'custom'
+        ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
+        : discounts.find(d => d.id === selectedDiscountId)?.name ?? null
 
-          const salePayload = {
-              total_amount: cartTotal.total,
-              payment_status: paymentStatus,
-              payment_method: normalizedPaymentMethod,
-              payment_notes: paymentNotes,
-              payment_data: paymentData,
-              notes: notes,
-              customer_id: currentSelectedCustomer?.id || null,
-              discount_amount: cartTotal.discount,
-              discount_name: selectedDiscountId === 'custom' 
-                  ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
-                  : discounts.find(d => d.id === selectedDiscountId)?.name,
-              tax_amount: cartTotal.tax,
-              table_id: tableId || null,
-              sale_type: orderType
-          }
-          let { error: saleError } = await supabase
-            .from("sales")
-            .update(salePayload)
-            .eq('id', activeSaleId)
-          
-          if (saleError && isMissingCustomerColumn(saleError)) {
-            const { error: retryError } = await supabase
-              .from("sales")
-              .update(removeCustomerId(salePayload))
-              .eq('id', activeSaleId)
-            saleError = retryError
-          }
-          
-          if (saleError) throw saleError
+      const saleItemsData = cartItems.map(i => {
+        const unitPrice = Number(i.item.selling_price) || 0
+        return {
+          menu_item_id: i.item.id,
+          quantity: i.quantity,
+          unit_price: unitPrice,
+          total_price: unitPrice * i.quantity
+        }
+      })
 
-          await supabase.from("sale_items").delete().eq("sale_id", activeSaleId)
+      if (saleItemsData.length === 0) {
+        throw new Error("No items to save")
+      }
 
-          const saleItemsData = cartItems.map(i => {
-            const unitPrice = Number(i.item.selling_price) || 0
-            return {
-              sale_id: activeSaleId,
-              menu_item_id: i.item.id,
-              quantity: i.quantity,
-              unit_price: unitPrice,
-              total_price: unitPrice * i.quantity
-            }
-          })
+      const { data: rpcData, error: rpcError } = await supabase.rpc("save_sale_with_items", {
+        p_sale_id: activeSaleId,
+        p_tenant_id: tenantId,
+        p_order_number: orderNumber,
+        p_sale_type: orderType,
+        p_table_id: tableId || null,
+        p_total_amount: cartTotal.total,
+        p_payment_status: paymentStatus,
+        p_payment_method: normalizedPaymentMethod,
+        p_payment_notes: paymentNotes,
+        p_payment_data: paymentData,
+        p_notes: notes,
+        p_customer_id: currentSelectedCustomer?.id || null,
+        p_discount_amount: cartTotal.discount,
+        p_discount_name: resolvedDiscountName,
+        p_tax_amount: cartTotal.tax,
+        p_sale_date: new Date().toISOString().split('T')[0],
+        p_sale_time: new Date().toISOString(),
+        p_created_by: user.id,
+        p_items: saleItemsData
+      })
 
-          if (saleItemsData.length === 0) {
-            throw new Error("No items to save")
-          }
+      if (rpcError) {
+        const { details, message } = formatSupabaseError(rpcError)
+        console.error("save_sale_with_items failed", details)
+        throw new Error(message)
+      }
 
-          const { error: itemsError } = await supabase
-            .from("sale_items")
-            .insert(saleItemsData)
+      const rpcRow = Array.isArray(rpcData) ? rpcData[0] : rpcData
+      if (!rpcRow?.sale_id) throw new Error('Failed to save sale')
 
-          if (itemsError) {
-            if (previousItems && previousItems.length > 0) {
-              await supabase
-                .from("sale_items")
-                .insert(previousItems.map(item => ({
-                  ...item,
-                  sale_id: activeSaleId
-                })))
-            }
-            throw itemsError
-          }
-      } else {
-          const salePayload = {
-            tenant_id: tenantId,
-            order_number: orderNumber,
-            sale_type: orderType,
-            table_id: tableId || null,
-            total_amount: cartTotal.total,
-            payment_status: paymentStatus,
-            payment_method: normalizedPaymentMethod,
-            payment_notes: paymentNotes,
-            payment_data: paymentData,
-            notes: notes,
-            customer_id: currentSelectedCustomer?.id || null,
-            discount_amount: cartTotal.discount,
-            discount_name: selectedDiscountId === 'custom' 
-                ? `Custom (${customDiscount.type === 'percentage' ? `${customDiscount.value}%` : `$${customDiscount.value}`})`
-                : discounts.find(d => d.id === selectedDiscountId)?.name,
-            tax_amount: cartTotal.tax,
-            sale_date: new Date().toISOString().split('T')[0],
-            sale_time: new Date().toISOString(),
-            created_by: user.id
-          }
-          let { data: saleData, error: saleError } = await supabase
-            .from("sales")
-            .insert(salePayload)
-            .select()
-            .single()
-
-          if (saleError && isMissingCustomerColumn(saleError)) {
-            const retryResult = await supabase
-              .from("sales")
-              .insert(removeCustomerId(salePayload))
-              .select()
-              .single()
-            saleData = retryResult.data
-            saleError = retryResult.error
-          }
-
-          if (saleError) throw saleError
-          saleId = saleData.id
-          setActiveSaleId(saleData.id)
-          
-          const saleItemsData = cartItems.map(i => {
-            const unitPrice = Number(i.item.selling_price) || 0
-            return {
-              sale_id: saleId,
-              menu_item_id: i.item.id,
-              quantity: i.quantity,
-              unit_price: unitPrice,
-              total_price: unitPrice * i.quantity
-            }
-          })
-
-          if (saleItemsData.length === 0) {
-            throw new Error("No items to save")
-          }
-
-          const { error: itemsError } = await supabase
-            .from("sale_items")
-            .insert(saleItemsData)
-
-          if (itemsError) {
-            await supabase
-              .from("sales")
-              .delete()
-              .eq("id", saleId)
-            throw itemsError
-          }
+      saleId = rpcRow.sale_id
+      if (!activeSaleId) setActiveSaleId(rpcRow.sale_id)
+      if (rpcRow.order_number && rpcRow.order_number !== orderNumber) {
+        setCurrentOrderId(rpcRow.order_number)
+        orderNumber = rpcRow.order_number
       }
       
       const { data: kdsOrder } = await supabase
@@ -1081,8 +997,9 @@ export default function POSPage() {
 
           return result
       } catch (err) {
-          console.error(err)
-          toast({ title: "Error", description: "Failed to process payment", variant: "destructive" })
+          const { details, message } = formatSupabaseError(err)
+          console.error("Payment failed", details)
+          toast({ title: "Error", description: message, variant: "destructive" })
           throw err
       } finally {
           setIsProcessing(false)
@@ -1227,7 +1144,7 @@ export default function POSPage() {
           <OrderQueueSkeleton />
         ) : (
           <OrderQueue
-            orders={activeOrders}
+            orders={liveActiveOrders}
             kitchenDisplays={kitchenDisplays}
             onOrderClick={(order) => setSelectedOrderDetails(order)}
           />

@@ -76,6 +76,7 @@ export default function SettingsPage() {
     receipt: {
       showLogo: false,
       headerText: 'SHOP NAME',
+      receiptTitle: 'CASH RECEIPT',
       address: 'Address: Lorem Ipsum, 23-10\nTelp. 11223344',
       phoneNumber: '11223344',
       footerText: 'THANK YOU!',
@@ -941,6 +942,18 @@ export default function SettingsPage() {
                         onChange={(e) => setSettings({
                           ...settings,
                           receipt: { ...settings.receipt!, headerText: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 border rounded-md"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium">Receipt Title</label>
+                      <input
+                        type="text"
+                        value={settings.receipt.receiptTitle}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          receipt: { ...settings.receipt!, receiptTitle: e.target.value }
                         })}
                         className="w-full px-3 py-2 border rounded-md"
                       />

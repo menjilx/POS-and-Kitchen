@@ -7,7 +7,7 @@ export interface Database {
           tenant_id: string | null
           email: string
           full_name: string | null
-          role: 'owner' | 'manager' | 'staff' | 'superadmin'
+          role: string
           status: 'active' | 'deactivated'
           last_login: string | null
           created_at: string
@@ -15,6 +15,29 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['users']['Row'], 'created_at' | 'updated_at'>
         Update: Partial<Omit<Database['public']['Tables']['users']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+      }
+      role_permissions: {
+        Row: {
+          id: string
+          tenant_id: string
+          role: string
+          permissions: string[]
+          created_at: string
+          updated_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['role_permissions']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<Database['public']['Tables']['role_permissions']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+      }
+      custom_roles: {
+        Row: {
+          id: string
+          tenant_id: string
+          name: string
+          description: string
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['custom_roles']['Row'], 'id' | 'created_at'>
+        Update: Partial<Omit<Database['public']['Tables']['custom_roles']['Row'], 'id' | 'tenant_id' | 'created_at'>>
       }
       tenants: {
         Row: {
@@ -252,6 +275,19 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['sales']['Row'], 'id' | 'created_at'>
         Update: Partial<Omit<Database['public']['Tables']['sales']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+      }
+      sale_history: {
+        Row: {
+          id: string
+          tenant_id: string
+          sale_id: string | null
+          action: string
+          details: unknown
+          created_by: string | null
+          created_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['sale_history']['Row'], 'id' | 'created_at'>
+        Update: Partial<Omit<Database['public']['Tables']['sale_history']['Row'], 'id' | 'tenant_id' | 'created_at'>>
       }
       sale_items: {
         Row: {

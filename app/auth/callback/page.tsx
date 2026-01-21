@@ -17,6 +17,10 @@ export default function AuthCallback() {
       }
 
       if (data.session) {
+        const { error: lastLoginError } = await supabase.rpc('update_last_login')
+        if (lastLoginError) {
+          console.error('Failed to update last login:', lastLoginError)
+        }
         const redirectUrl = new URLSearchParams(window.location.search).get('redirect')
         router.push(redirectUrl || '/dashboard')
       } else {

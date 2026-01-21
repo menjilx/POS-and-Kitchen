@@ -66,6 +66,7 @@ export function LoginForm({
           title: "Success",
           description: "Logged in successfully",
         })
+        await supabase.rpc('update_last_login')
         const redirectUrl = searchParams.get("redirect")
         router.push(redirectUrl || "/dashboard")
       }

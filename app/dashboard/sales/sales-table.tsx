@@ -15,6 +15,14 @@ import {
 import { FileDown } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -32,23 +40,80 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getColumns, Sale } from "./columns"
+import { supabase } from "@/lib/supabase/client"
+import { useToast } from "@/hooks/use-toast"
 
 interface SalesTableProps {
   data: Sale[]
   currency: string
+  canDelete?: boolean
 }
 
-export function SalesTable({ data, currency }: SalesTableProps) {
+export function SalesTable({ data, currency, canDelete }: SalesTableProps) {
+  const { toast } = useToast()
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
   const [rowSelection, setRowSelection] = React.useState({})
   const [globalFilter, setGlobalFilter] = React.useState("")
+  const [rows, setRows] = React.useState<Sale[]>(data)
+  const [deletingId, setDeletingId] = React.useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
+  const [deleteCandidate, setDeleteCandidate] = React.useState<Sale | null>(null)
 
-  const columns = React.useMemo(() => getColumns(currency), [currency])
+  React.useEffect(() => {
+    setRows(data)
+  }, [data])
+
+  const openDeleteDialog = React.useCallback((sale: Sale) => {
+    if (!canDelete) return
+    setDeleteCandidate(sale)
+    setDeleteDialogOpen(true)
+  }, [canDelete])
+
+  const handleDelete = React.useCallback(async () => {
+    if (!canDelete) return
+    if (!deleteCandidate) return
+    setDeletingId(deleteCandidate.id)
+    try {
+      const { data: deletedRows, error } = await supabase
+        .from("sales")
+        .delete()
+        .eq("id", deleteCandidate.id)
+        .eq("tenant_id", deleteCandidate.tenant_id)
+        .select("id")
+
+      if (error) throw error
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error("No rows deleted. Check permissions or record availability.")
+      }
+
+      setRows((prev) => prev.filter((row) => row.id !== deleteCandidate.id))
+      toast({ title: "Sale deleted", description: `Order ${deleteCandidate.order_number} was deleted.` })
+      setDeleteDialogOpen(false)
+      setDeleteCandidate(null)
+    } catch (err) {
+      const errorDetails =
+        err && typeof err === "object"
+          ? Object.fromEntries(Object.getOwnPropertyNames(err).map((key) => [key, (err as Record<string, unknown>)[key]]))
+          : err
+      console.error("Delete sale failed", errorDetails)
+      const errorLike = err as { message?: string; details?: string; hint?: string; code?: string } | null
+      const message =
+        (errorLike?.message || errorLike?.details || errorLike?.hint || errorLike?.code) ?? "Failed to delete sale"
+      toast({ title: "Error", description: message, variant: "destructive" })
+    } finally {
+      setDeletingId(null)
+    }
+  }, [canDelete, deleteCandidate, toast])
+
+  const columns = React.useMemo(
+    () => getColumns(currency, { onDelete: openDeleteDialog, deletingId, canDelete }),
+    [currency, deletingId, canDelete, openDeleteDialog]
+  )
 
   const table = useReactTable({
-    data,
+    data: rows,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -70,16 +135,20 @@ export function SalesTable({ data, currency }: SalesTableProps) {
 
   // Export function
   const exportToCsv = () => {
-    const headers = ["Order #", "Type", "Amount", "Payment Method", "Payment Status", "Kitchen Status", "Date"]
-    const rows = table.getFilteredRowModel().rows.map(row => [
-      row.original.order_number,
-      row.original.sale_type,
-      row.original.total_amount,
-      row.original.payment_method,
-      row.original.payment_status,
-      row.getValue("kds_status"),
-      `"${new Date(row.original.sale_time).toLocaleString()}"`
-    ])
+    const headers = ["Order #", "Type", "Items", "Amount", "Payment Method", "Payment Status", "Display Status", "Date"]
+    const rows = table.getFilteredRowModel().rows.map(row => {
+      const itemsCount = (row.original.sale_items ?? []).reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+      return [
+        row.original.order_number,
+        row.original.sale_type,
+        itemsCount,
+        row.original.total_amount,
+        row.original.payment_method,
+        row.original.payment_status,
+        row.getValue("kds_status"),
+        `"${new Date(row.original.sale_time).toLocaleString()}"`
+      ]
+    })
 
     const csvContent = [
       headers.join(","),
@@ -99,6 +168,31 @@ export function SalesTable({ data, currency }: SalesTableProps) {
 
   return (
     <div className="space-y-4">
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && deletingId) return
+          setDeleteDialogOpen(open)
+          if (!open) setDeleteCandidate(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Sale</DialogTitle>
+            <DialogDescription>
+              {deleteCandidate ? `Delete order ${deleteCandidate.order_number}? This action cannot be undone.` : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={!!deletingId}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={!!deletingId}>
+              {deletingId ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 items-center gap-2 flex-wrap">
           <Input

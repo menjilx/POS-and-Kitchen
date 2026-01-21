@@ -36,6 +36,7 @@ export default async function UsersPage() {
   return <UsersClient 
     users={users || []} 
     currentUser={currentUser} 
-    rolePermissions={permissionsResult} 
+    roles={permissionsResult.roles} 
+    rolePermissions={permissionsResult.permissionsByRole} 
   />
 }

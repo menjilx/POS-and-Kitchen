@@ -24,7 +24,7 @@ export default async function SalesPage() {
   ] = await Promise.all([
     supabase
       .from('sales')
-      .select('*, kds_orders(status, started_at, completed_at)')
+      .select('*, kds_orders(status, started_at, completed_at), sale_items(quantity)')
       .eq('tenant_id', userData.tenant_id)
       .order('sale_time', { ascending: false })
       .limit(1000),
@@ -42,6 +42,8 @@ export default async function SalesPage() {
   // We know the shape matches because of the select query
   const sales = (salesData || []) as unknown as Sale[]
 
+  const canDelete = userData.role === 'owner' || userData.role === 'manager'
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -54,7 +56,7 @@ export default async function SalesPage() {
         </a>
       </div>
 
-      <SalesTable data={sales} currency={currency} />
+      <SalesTable data={sales} currency={currency} canDelete={canDelete} />
     </div>
   )
 }

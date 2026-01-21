@@ -253,7 +253,6 @@ export function PaymentModal({
       paymentMethod,
       paymentStatus: paymentMethod === 'house_account' ? 'pending' : 'paid',
       paymentRef: cardRef,
-      paymentNotes: paymentNotes,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
       currency: tenantSettings.currency || 'USD',
@@ -464,7 +463,7 @@ export function PaymentModal({
                     <Label className="text-base font-semibold">Send Order To</Label>
                     <Select value={selectedDestination} onValueChange={setSelectedDestination}>
                         <SelectTrigger className="w-full h-12 text-lg">
-                            <SelectValue placeholder="Select Kitchen Display" />
+                            <SelectValue placeholder="Select Display" />
                         </SelectTrigger>
                         <SelectContent>
                             {kitchenDisplays.map(d => (

@@ -122,9 +122,6 @@ export default function DashboardPage() {
       if (orderAssignedStation === display.id) return true
 
       // 2. Legacy/Name match handling
-      // If assigned_station is null, and this display is a "Kitchen", include it
-      if (!orderAssignedStation && stationMatchesKitchen(display.name)) return true
-
       // If assigned_station matches name (Legacy behavior)
       if (orderAssignedStation === display.name) return true
       

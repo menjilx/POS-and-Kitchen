@@ -18,6 +18,7 @@ export type TenantSettings = {
     showLogo: boolean
     logoUrl?: string
     headerText: string
+    receiptTitle: string
     address: string
     phoneNumber: string
     footerText: string
@@ -59,6 +60,7 @@ const defaultSettings: TenantSettings = {
   receipt: {
     showLogo: false,
     headerText: 'SHOP NAME',
+    receiptTitle: 'CASH RECEIPT',
     address: 'Address: Lorem Ipsum, 23-10\nTelp. 11223344',
     phoneNumber: '11223344',
     footerText: 'THANK YOU!',

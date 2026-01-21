@@ -1,7 +1,7 @@
 "use client"
 
 import { ColumnDef } from "@tanstack/react-table"
-import { Eye } from "lucide-react"
+import { Eye, Loader2, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { formatCurrency } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
@@ -15,6 +15,7 @@ export type SaleKdsOrder = {
 
 export type Sale = {
   id: string
+  tenant_id: string
   order_number: string
   sale_type: string
   total_amount: number
@@ -22,6 +23,7 @@ export type Sale = {
   payment_status: string
   sale_time: string
   kds_orders: SaleKdsOrder | SaleKdsOrder[] | null
+  sale_items?: { quantity: number | null }[] | null
 }
 
 export const getKdsStatus = (sale: Sale) => {
@@ -88,16 +90,38 @@ const getStatusColor = (status: string) => {
   }
 }
 
-export const getColumns = (currency: string): ColumnDef<Sale>[] => [
+type SalesColumnOptions = {
+  onDelete?: (sale: Sale) => void
+  deletingId?: string | null
+  canDelete?: boolean
+}
+
+export const getColumns = (currency: string, options?: SalesColumnOptions): ColumnDef<Sale>[] => [
   {
     accessorKey: "order_number",
     header: "Order #",
-    cell: ({ row }) => <span className="font-medium">{row.getValue("order_number")}</span>,
+    cell: ({ row }) => (
+      <Link
+        href={`/dashboard/sales/${row.original.id}`}
+        className="font-medium text-primary hover:underline underline-offset-4"
+      >
+        {row.getValue("order_number")}
+      </Link>
+    ),
   },
   {
     accessorKey: "sale_type",
     header: "Type",
     cell: ({ row }) => <span className="capitalize">{(row.getValue("sale_type") as string)?.replace('_', ' ')}</span>,
+  },
+  {
+    id: "items_count",
+    header: "Items",
+    accessorFn: (row) => {
+      const items = row.sale_items ?? []
+      return items.reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+    },
+    cell: ({ row }) => <span className="text-sm">{row.getValue("items_count") as number}</span>,
   },
   {
     accessorKey: "total_amount",
@@ -131,7 +155,7 @@ export const getColumns = (currency: string): ColumnDef<Sale>[] => [
   {
     id: "kds_status",
     accessorFn: (row) => getKdsStatus(row),
-    header: "Kitchen Status",
+    header: "Display Status",
     cell: ({ row }) => {
       const kdsStatus = row.getValue("kds_status") as string
       if (kdsStatus === 'unknown') return <span className="text-gray-400 text-xs">-</span>
@@ -160,12 +184,29 @@ export const getColumns = (currency: string): ColumnDef<Sale>[] => [
   },
   {
     id: "actions",
-    cell: ({ row }) => (
-      <Link href={`/dashboard/sales/${row.original.id}`}>
-        <Button variant="ghost" size="icon" className="rounded-full">
-          <Eye className="w-4 h-4 text-gray-500" />
-        </Button>
-      </Link>
-    ),
+    cell: ({ row }) => {
+      const isDeleting = options?.deletingId === row.original.id
+      return (
+        <div className="flex items-center gap-2">
+          <Link href={`/dashboard/sales/${row.original.id}`}>
+            <Button variant="ghost" size="icon" className="rounded-full">
+              <Eye className="w-4 h-4 text-gray-500" />
+            </Button>
+          </Link>
+          {options?.canDelete ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => options?.onDelete?.(row.original)}
+              disabled={isDeleting}
+              className="text-destructive hover:text-destructive"
+              aria-label="Delete sale"
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </Button>
+          ) : null}
+        </div>
+      )
+    },
   },
 ]

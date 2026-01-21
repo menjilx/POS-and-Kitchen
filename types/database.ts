@@ -57,10 +57,10 @@ export type Customer = {
   updated_at: string
 }
 
-export type UserRole = 'owner' | 'manager' | 'staff' | 'superadmin'
+export type UserRole = string
 export type UserStatus = 'active' | 'deactivated'
 
-export type PaymentMethod = 'cash' | 'card' | 'ewallet' | 'bank_transfer'
+export type PaymentMethod = string
 export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded'
 
 export type SaleType = 'dine_in' | 'takeout' | 'delivery'
