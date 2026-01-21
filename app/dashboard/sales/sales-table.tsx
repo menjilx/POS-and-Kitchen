@@ -43,13 +43,19 @@ import { getColumns, Sale } from "./columns"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
 
+type PaymentMethodOption = {
+  id: string
+  label: string
+}
+
 interface SalesTableProps {
   data: Sale[]
   currency: string
   canDelete?: boolean
+  paymentMethods: PaymentMethodOption[]
 }
 
-export function SalesTable({ data, currency, canDelete }: SalesTableProps) {
+export function SalesTable({ data, currency, canDelete, paymentMethods }: SalesTableProps) {
   const { toast } = useToast()
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
@@ -111,6 +117,22 @@ export function SalesTable({ data, currency, canDelete }: SalesTableProps) {
     () => getColumns(currency, { onDelete: openDeleteDialog, deletingId, canDelete }),
     [currency, deletingId, canDelete, openDeleteDialog]
   )
+
+  const paymentMethodOptions = React.useMemo(() => {
+    const map = new Map<string, string>()
+    paymentMethods.forEach((method) => {
+      if (method?.id) map.set(method.id, method.label || method.id)
+    })
+    rows.forEach((row) => {
+      if (row.payment_method && !map.has(row.payment_method)) {
+        map.set(row.payment_method, row.payment_method.replace(/_/g, " "))
+      }
+    })
+    return Array.from(map.entries()).map(([id, label]) => ({
+      id,
+      label,
+    }))
+  }, [paymentMethods, rows])
 
   const table = useReactTable({
     data: rows,
@@ -216,6 +238,25 @@ export function SalesTable({ data, currency, canDelete }: SalesTableProps) {
               <SelectItem value="paid">Paid</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="refunded">Refunded</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={(table.getColumn("payment_method")?.getFilterValue() as string) ?? "all"}
+            onValueChange={(value) =>
+              table.getColumn("payment_method")?.setFilterValue(value === "all" ? undefined : value)
+            }
+          >
+            <SelectTrigger className="h-8 w-36">
+              <SelectValue placeholder="Method" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Methods</SelectItem>
+              {paymentMethodOptions.map((method) => (
+                <SelectItem key={method.id} value={method.id}>
+                  {method.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 

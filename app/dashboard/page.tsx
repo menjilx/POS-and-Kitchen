@@ -198,7 +198,7 @@ export default function DashboardPage() {
   }, [])
 
   const getDelta = useCallback((current: number, previous: number) => {
-    if (previous <= 0) return null
+    if (previous <= 0) return current > 0 ? 1 : 0
     return (current - previous) / previous
   }, [])
 
@@ -221,6 +221,9 @@ export default function DashboardPage() {
       const FooterIcon = isUp ? TrendingUpIcon : TrendingDownIcon
       const badgeText =
         typeof delta === 'number' ? `${delta > 0 ? '+' : ''}${formatPercent(delta)}` : null
+      const badgeClass = isUp
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : 'border-rose-200 bg-rose-50 text-rose-700'
 
       return (
         <Card className="@container/card bg-linear-to-t from-primary/5 to-card shadow-xs dark:bg-card">
@@ -229,7 +232,7 @@ export default function DashboardPage() {
             <CardTitle className="@[250px]/card:text-3xl text-2xl font-semibold tabular-nums">{value}</CardTitle>
             {badgeText ? (
               <div className="absolute right-4 top-4">
-                <Badge variant="outline" className="flex gap-1 rounded-lg text-xs">
+                <Badge variant="outline" className={`flex gap-1 rounded-lg text-xs ${badgeClass}`}>
                   <BadgeIcon className="size-3" />
                   {badgeText}
                 </Badge>
@@ -402,7 +405,7 @@ export default function DashboardPage() {
 
         if (ingredient) {
           const cost = Number(ingredient.cost_per_unit) || 0
-          totalStockValue += qty * cost
+          totalStockValue += Math.max(0, qty) * cost
           if (!ingredientMeta.has(row.ingredient_id)) {
             ingredientMeta.set(row.ingredient_id, {
               name: ingredient.name,

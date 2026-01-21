@@ -905,43 +905,87 @@ export default function POSPage() {
         throw new Error("No items to save")
       }
 
-      const { data: rpcData, error: rpcError } = await supabase.rpc("save_sale_with_items", {
-        p_sale_id: activeSaleId,
-        p_tenant_id: tenantId,
-        p_order_number: orderNumber,
-        p_sale_type: orderType,
-        p_table_id: tableId || null,
-        p_total_amount: cartTotal.total,
-        p_payment_status: paymentStatus,
-        p_payment_method: normalizedPaymentMethod,
-        p_payment_notes: paymentNotes,
-        p_payment_data: paymentData,
-        p_notes: notes,
-        p_customer_id: currentSelectedCustomer?.id || null,
-        p_discount_amount: cartTotal.discount,
-        p_discount_name: resolvedDiscountName,
-        p_tax_amount: cartTotal.tax,
-        p_sale_date: new Date().toISOString().split('T')[0],
-        p_sale_time: new Date().toISOString(),
-        p_created_by: user.id,
-        p_items: saleItemsData
-      })
+      if (activeSaleId) {
+        const { error: saleError } = await supabase
+          .from("sales")
+          .update({
+            total_amount: cartTotal.total,
+            payment_status: paymentStatus,
+            payment_method: normalizedPaymentMethod,
+            payment_notes: paymentNotes,
+            payment_data: paymentData,
+            notes: notes,
+            customer_id: currentSelectedCustomer?.id || null,
+            discount_amount: cartTotal.discount,
+            discount_name: resolvedDiscountName,
+            tax_amount: cartTotal.tax,
+            table_id: tableId || null,
+            sale_type: orderType
+          })
+          .eq("id", activeSaleId)
+          .eq("tenant_id", tenantId)
 
-      if (rpcError) {
-        const { details, message } = formatSupabaseError(rpcError)
-        console.error("save_sale_with_items failed", details)
-        throw new Error(message)
+        if (saleError) throw saleError
+
+        const { error: deleteError } = await supabase
+          .from("sale_items")
+          .delete()
+          .eq("sale_id", activeSaleId)
+
+        if (deleteError) throw deleteError
+
+        saleId = activeSaleId
+      } else {
+        const { data: saleData, error: saleError } = await supabase
+          .from("sales")
+          .insert({
+            tenant_id: tenantId,
+            order_number: orderNumber,
+            sale_type: orderType,
+            table_id: tableId || null,
+            total_amount: cartTotal.total,
+            payment_status: paymentStatus,
+            payment_method: normalizedPaymentMethod,
+            payment_notes: paymentNotes,
+            payment_data: paymentData,
+            notes: notes,
+            customer_id: currentSelectedCustomer?.id || null,
+            discount_amount: cartTotal.discount,
+            discount_name: resolvedDiscountName,
+            tax_amount: cartTotal.tax,
+            sale_date: new Date().toISOString().split('T')[0],
+            sale_time: new Date().toISOString(),
+            created_by: user.id
+          })
+          .select("id, order_number")
+          .single()
+
+        if (saleError) throw saleError
+        if (!saleData?.id) throw new Error("Failed to save sale")
+
+        saleId = saleData.id
+        if (!activeSaleId) setActiveSaleId(saleData.id)
+        if (saleData.order_number && saleData.order_number !== orderNumber) {
+          setCurrentOrderId(saleData.order_number)
+          orderNumber = saleData.order_number
+        }
       }
 
-      const rpcRow = Array.isArray(rpcData) ? rpcData[0] : rpcData
-      if (!rpcRow?.sale_id) throw new Error('Failed to save sale')
+      if (!saleId) throw new Error('Failed to save sale')
 
-      saleId = rpcRow.sale_id
-      if (!activeSaleId) setActiveSaleId(rpcRow.sale_id)
-      if (rpcRow.order_number && rpcRow.order_number !== orderNumber) {
-        setCurrentOrderId(rpcRow.order_number)
-        orderNumber = rpcRow.order_number
-      }
+      const { error: itemsError } = await supabase
+        .from("sale_items")
+        .insert(
+          saleItemsData.map((item) => ({
+            sale_id: saleId,
+            menu_item_id: item.menu_item_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.total_price
+          }))
+        )
+
+      if (itemsError) throw itemsError
       
       const { data: kdsOrder } = await supabase
         .from("kds_orders")
@@ -977,7 +1021,7 @@ export default function POSPage() {
   const handlePaymentComplete = async (method: string, receivedAmount: number, isHouseAccount: boolean, additionalData?: PaymentAdditionalData, destination?: string) => {
       setIsProcessing(true)
       try {
-          const status = isHouseAccount ? 'pending' : 'paid'
+          const status = 'paid'
           const mergedAdditionalData = {
             ...additionalData,
             receivedAmount: isHouseAccount ? undefined : receivedAmount,

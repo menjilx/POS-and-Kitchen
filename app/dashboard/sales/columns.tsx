@@ -19,7 +19,7 @@ export type Sale = {
   order_number: string
   sale_type: string
   total_amount: number
-  payment_method: string
+  payment_method: string | null
   payment_status: string
   sale_time: string
   kds_orders: SaleKdsOrder | SaleKdsOrder[] | null
@@ -131,7 +131,13 @@ export const getColumns = (currency: string, options?: SalesColumnOptions): Colu
   {
     accessorKey: "payment_method",
     header: "Payment Method",
-    cell: ({ row }) => <span className="capitalize">{(row.getValue("payment_method") as string)?.replace('_', ' ') || '-'}</span>,
+    cell: ({ row }) => (
+      <span className="capitalize">{(row.getValue("payment_method") as string | null)?.replace('_', ' ') || '-'}</span>
+    ),
+    filterFn: (row, id, value) => {
+      if (!value) return true
+      return row.getValue(id) === value
+    },
   },
   {
     accessorKey: "payment_status",

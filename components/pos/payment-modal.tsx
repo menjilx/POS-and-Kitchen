@@ -251,7 +251,7 @@ export function PaymentModal({
       orderNumber,
       date: new Date().toLocaleString(),
       paymentMethod,
-      paymentStatus: paymentMethod === 'house_account' ? 'pending' : 'paid',
+      paymentStatus: 'paid',
       paymentRef: cardRef,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,

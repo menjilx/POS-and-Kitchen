@@ -3,6 +3,19 @@ import { redirect } from 'next/navigation'
 import { SalesTable } from './sales-table'
 import type { Sale } from './columns'
 
+type PaymentMethodOption = {
+  id: string
+  label: string
+}
+
+const defaultPaymentMethods: PaymentMethodOption[] = [
+  { id: 'cash', label: 'Cash' },
+  { id: 'card', label: 'Credit/Debit Card' },
+  { id: 'house_account', label: 'House Account (In-house)' },
+  { id: 'ewallet', label: 'E-Wallet' },
+  { id: 'bank_transfer', label: 'Bank Transfer' },
+]
+
 export default async function SalesPage() {
   const supabase = await createClient()
 
@@ -35,8 +48,15 @@ export default async function SalesPage() {
       .single()
   ])
 
-  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
+  const tenantSettings = tenantData?.settings as unknown as {
+    currency?: string
+    paymentMethods?: PaymentMethodOption[]
+  } | null
   const currency = tenantSettings?.currency ?? 'USD'
+  const paymentMethods =
+    Array.isArray(tenantSettings?.paymentMethods) && tenantSettings.paymentMethods.length > 0
+      ? tenantSettings.paymentMethods
+      : defaultPaymentMethods
   
   // Cast salesData to match the Sale type required by columns
   // We know the shape matches because of the select query
@@ -56,7 +76,7 @@ export default async function SalesPage() {
         </a>
       </div>
 
-      <SalesTable data={sales} currency={currency} canDelete={canDelete} />
+      <SalesTable data={sales} currency={currency} canDelete={canDelete} paymentMethods={paymentMethods} />
     </div>
   )
 }
