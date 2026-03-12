@@ -27,14 +27,6 @@ export default async function PurchaseDetailsPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id')
-    .eq('id', user.id)
-    .single()
-
-  if (!userData) redirect('/login')
-
   // Fetch purchase details
   const { data: purchase, error } = await supabase
     .from('purchases')
@@ -49,22 +41,20 @@ export default async function PurchaseDetailsPage({
       purchase_attachments (*)
     `)
     .eq('id', id)
-    .eq('tenant_id', userData.tenant_id)
     .single()
 
   if (error || !purchase) {
     notFound()
   }
 
-  // Fetch tenant settings for currency
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('settings')
-    .eq('id', userData.tenant_id)
+  // Fetch currency setting
+  const { data: currencySetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'currency')
     .single()
 
-  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
-  const currency = tenantSettings?.currency ?? 'USD'
+  const currency = currencySetting?.value ?? 'USD'
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

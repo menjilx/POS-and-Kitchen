@@ -14,16 +14,6 @@ export default async function EditCustomerPage({ params }: PageProps) {
 
   if (!user) redirect('/login')
 
-  const { data: currentUser } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  if (!currentUser) {
-    redirect('/dashboard')
-  }
-
   const { data: customer } = await supabase
     .from('customers')
     .select('*')
@@ -40,7 +30,7 @@ export default async function EditCustomerPage({ params }: PageProps) {
         <h1 className="text-3xl font-bold">Edit Customer</h1>
         <p className="text-muted-foreground">Update customer details</p>
       </div>
-      <CustomerForm initialData={customer} tenantId={currentUser.tenant_id} />
+      <CustomerForm initialData={customer} />
     </div>
   )
 }

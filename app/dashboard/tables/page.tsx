@@ -11,7 +11,7 @@ export default async function TablesPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -19,21 +19,19 @@ export default async function TablesPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: tables }, { data: tenantData }] = await Promise.all([
+  const [{ data: tables }, { data: menuSetting }] = await Promise.all([
     supabase
       .from('tables')
       .select('*')
-      .eq('tenant_id', userData.tenant_id)
       .order('table_number'),
     supabase
-      .from('tenants')
-      .select('settings')
-      .eq('id', userData.tenant_id)
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'features_menu')
       .single(),
   ])
 
-  const tenantSettings = tenantData?.settings as unknown as { features?: { menu?: boolean } } | null
-  const menuEnabled = tenantSettings?.features?.menu ?? true
+  const menuEnabled = menuSetting?.value !== 'false'
   if (!menuEnabled) redirect('/dashboard')
 
   return (

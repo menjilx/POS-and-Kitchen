@@ -91,47 +91,70 @@ export function useTenantSettings(): UseTenantSettingsResult {
         return
       }
 
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
+      // Fetch settings from app_settings table
+      const { data: settingsRows, error: settingsError } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['currency', 'timezone', 'tax_rate', 'payment_methods', 'receipt_settings', 'features_menu'])
 
-      if (userError) throw userError
-      if (!userData?.tenant_id) {
-        setError('No tenant found')
-        return
+      if (settingsError) throw settingsError
+
+      const settingsMap = new Map<string, string>()
+      if (settingsRows) {
+        for (const row of settingsRows) {
+          if (row.value !== null) {
+            settingsMap.set(row.key, row.value)
+          }
+        }
       }
 
-      const { data: tenantData, error: tenantError } = await supabase
-        .from('tenants')
-        .select('settings')
-        .eq('id', userData.tenant_id)
-        .single()
+      const next: Partial<TenantSettings> = {}
 
-      if (tenantError) throw tenantError
+      const currency = settingsMap.get('currency')
+      if (currency) next.currency = currency
 
-      if (tenantData?.settings) {
-        const next = tenantData.settings as unknown as TenantSettings
-        const mergedReceipt = next.receipt
-          ? { ...defaultSettings.receipt, ...next.receipt }
-          : defaultSettings.receipt
-        const mergedFeatures = next.features
-          ? { ...defaultSettings.features, ...next.features }
-          : defaultSettings.features
-        const mergedPaymentMethods = Array.isArray(next.paymentMethods) && next.paymentMethods.length > 0
-          ? next.paymentMethods
-          : defaultSettings.paymentMethods
-        setSettings({
-          ...defaultSettings,
-          ...next,
-          features: mergedFeatures,
-          receipt: mergedReceipt,
-          paymentMethods: mergedPaymentMethods,
-        })
-      } else {
-        setSettings(defaultSettings)
+      const timezone = settingsMap.get('timezone')
+      if (timezone) next.timezone = timezone
+
+      const taxRate = settingsMap.get('tax_rate')
+      if (taxRate) next.tax_rate = Number(taxRate) || 0
+
+      const featuresMenu = settingsMap.get('features_menu')
+      if (featuresMenu !== undefined) {
+        next.features = { menu: featuresMenu === 'true' }
       }
+
+      const paymentMethodsStr = settingsMap.get('payment_methods')
+      if (paymentMethodsStr) {
+        try {
+          const parsed = JSON.parse(paymentMethodsStr)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            next.paymentMethods = parsed
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+
+      const receiptStr = settingsMap.get('receipt_settings')
+      if (receiptStr) {
+        try {
+          const parsed = JSON.parse(receiptStr)
+          if (parsed && typeof parsed === 'object') {
+            next.receipt = { ...defaultSettings.receipt!, ...parsed }
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+
+      setSettings({
+        ...defaultSettings,
+        ...next,
+        features: next.features ?? defaultSettings.features,
+        receipt: next.receipt ?? defaultSettings.receipt,
+        paymentMethods: next.paymentMethods ?? defaultSettings.paymentMethods,
+      })
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load settings'
       setError(message)

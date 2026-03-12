@@ -2,7 +2,6 @@ import { Database } from '@/types/supabase'
 
 type Tables = Database['public']['Tables']
 
-export type Tenant = Tables['tenants']['Row']
 export type User = Tables['users']['Row'] & {
   email: string
 }
@@ -46,7 +45,6 @@ export type CashierSession = Tables['cashier_sessions']['Row']
 
 export type Customer = {
   id: string
-  tenant_id: string
   name: string
   email: string | null
   phone: string | null

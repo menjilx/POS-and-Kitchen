@@ -40,10 +40,9 @@ const formSchema = z.object({
 
 interface CustomerFormProps {
   initialData?: Customer
-  tenantId: string
 }
 
-export function CustomerForm({ initialData, tenantId }: CustomerFormProps) {
+export function CustomerForm({ initialData }: CustomerFormProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
@@ -92,7 +91,6 @@ export function CustomerForm({ initialData, tenantId }: CustomerFormProps) {
       } else {
         const { error } = await supabase.from("customers").insert({
           ...values,
-          tenant_id: tenantId,
         })
 
         if (error) throw error

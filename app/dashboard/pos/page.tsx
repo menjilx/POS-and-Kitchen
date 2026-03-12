@@ -183,15 +183,14 @@ export default function POSPage() {
     cashierSession,
     selectedCustomer,
     kitchenDisplays,
-    tenantId,
     loading: isPosDataLoading,
     refresh: refreshPOSData,
   } = useOptimizedPOSData()
 
   const createFallbackOrderNumber = () => `#ORD-${Math.floor(Math.random() * 10000)}`
 
-  const fetchNextOrderNumber = async (tid: string) => {
-    const { data, error } = await supabase.rpc('get_next_order_number', { p_tenant_id: tid })
+  const fetchNextOrderNumber = async () => {
+    const { data, error } = await supabase.rpc('get_next_order_number')
     if (error || !data) throw error ?? new Error('Failed to generate order number')
     return data as string
   }
@@ -267,14 +266,11 @@ export default function POSPage() {
 
   // Poll for KDS updates
   useEffect(() => {
-    if (!tenantId) return
-
     const fetchKDSUpdates = async () => {
       try {
         const { data: kdsRes, error } = await supabase
           .from("kds_orders")
           .select("*")
-          .eq("tenant_id", tenantId)
           .in("status", ["pending", "preparing", "ready"])
           .order("created_at", { ascending: false })
 
@@ -321,16 +317,15 @@ export default function POSPage() {
     const intervalId = setInterval(fetchKDSUpdates, 5000)
 
     return () => clearInterval(intervalId)
-  }, [tenantId])
+  }, [])
 
   useEffect(() => {
     const ensureOrderNumber = async () => {
-      if (!tenantId) return
       if (activeSaleId) return
       if (currentOrderId) return
 
       try {
-        const next = await fetchNextOrderNumber(tenantId)
+        const next = await fetchNextOrderNumber()
         setCurrentOrderId(next)
       } catch {
         setCurrentOrderId(createFallbackOrderNumber())
@@ -338,7 +333,7 @@ export default function POSPage() {
     }
 
     void ensureOrderNumber()
-  }, [tenantId, activeSaleId, currentOrderId])
+  }, [activeSaleId, currentOrderId])
 
   const filteredItems = useMemo(() => {
     return menuItems.filter(item => {
@@ -382,15 +377,9 @@ export default function POSPage() {
         toast({ title: "Authentication Required", description: "Please sign in again to open the register.", variant: "destructive" })
         return
       }
-      if (!tenantId) {
-        toast({ title: "No Tenant Found", description: "Unable to resolve tenant for this account.", variant: "destructive" })
-        return
-      }
-
       if (registerModalMode === 'open') {
         const { data: rpcResult, error: rpcError } = await supabase
           .rpc('open_cashier_session', {
-            p_tenant_id: tenantId,
             p_user_id: user.id,
             p_opening_amount: amount,
             p_notes: notes
@@ -500,7 +489,6 @@ export default function POSPage() {
         const { data: sales, error } = await supabase
           .from('sales')
           .select('id, total_amount, payment_method, payment_status, discount_amount, tax_amount')
-          .eq('tenant_id', cashierSession.tenant_id)
           .eq('created_by', cashierSession.user_id)
           .gte('created_at', cashierSession.opening_time)
           .in('payment_status', ['paid', 'refunded'])
@@ -519,7 +507,6 @@ export default function POSPage() {
           const { data: kdsOrders, error: kdsError } = await supabase
             .from('kds_orders')
             .select('sale_id, status')
-            .eq('tenant_id', cashierSession.tenant_id)
             .in('sale_id', refundedSaleIds)
 
           if (kdsError) throw kdsError
@@ -605,7 +592,6 @@ export default function POSPage() {
                 tables (table_number),
                 sale_items (quantity)
             `)
-            .eq('tenant_id', cashierSession.tenant_id)
             .eq('created_by', cashierSession.user_id)
             .gte('created_at', cashierSession.opening_time)
             .order('created_at', { ascending: false })
@@ -804,7 +790,6 @@ export default function POSPage() {
   }
 
   const handleSendToKitchen = async (destination?: string, options?: { holdAfterSend?: boolean }) => {
-    if (!tenantId) return
     if (cartItems.length === 0) return
 
     setIsProcessing(true)
@@ -833,7 +818,6 @@ export default function POSPage() {
   }
 
   const handleOrderSubmit = async (status: 'hold' | 'pay') => {
-    if (!tenantId) return
     if (cartItems.length === 0) return
     
     if (status === 'pay') {
@@ -862,12 +846,12 @@ export default function POSPage() {
 
   const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData) => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!tenantId || !user) throw new Error("No user or tenant")
+      if (!user) throw new Error("No user")
 
       let orderNumber = currentOrderId
       if (!orderNumber) {
         try {
-          orderNumber = await fetchNextOrderNumber(tenantId)
+          orderNumber = await fetchNextOrderNumber()
         } catch {
           orderNumber = createFallbackOrderNumber()
         }
@@ -923,7 +907,6 @@ export default function POSPage() {
             sale_type: orderType
           })
           .eq("id", activeSaleId)
-          .eq("tenant_id", tenantId)
 
         if (saleError) throw saleError
 
@@ -939,7 +922,6 @@ export default function POSPage() {
         const { data: saleData, error: saleError } = await supabase
           .from("sales")
           .insert({
-            tenant_id: tenantId,
             order_number: orderNumber,
             sale_type: orderType,
             table_id: tableId || null,
@@ -1260,7 +1242,6 @@ export default function POSPage() {
             customDiscount={customDiscount}
             setCustomDiscount={setCustomDiscount}
             onTaxChange={() => {}}
-            tenantId={tenantId}
             onSendToKitchen={handleSendToKitchen}
             kitchenDisplays={kitchenDisplays}
           />

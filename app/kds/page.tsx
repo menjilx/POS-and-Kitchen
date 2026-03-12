@@ -150,13 +150,13 @@ function KDSContent() {
   
   const [orders, setOrders] = useState<OrderWithItems[]>([])
   const [loading, setLoading] = useState(true)
-  const [tenantId, setTenantId] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
   const [stationName, setStationName] = useState<string | null>(null)
   const [stationId, setStationId] = useState<string | null>(null)
   const [availableStations, setAvailableStations] = useState<{name: string, id: string}[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const loadOrders = useCallback(async (tid: string, sId?: string | null, sName?: string | null) => {
+  const loadOrders = useCallback(async (sId?: string | null, sName?: string | null) => {
     let query = supabase
       .from('kds_orders')
       .select(`
@@ -171,7 +171,6 @@ function KDSContent() {
           menu_items (name)
         )
       `)
-      .eq('tenant_id', tid)
       .not('status', 'eq', 'served')
       .not('status', 'eq', 'cancelled')
       .order('created_at', { ascending: true })
@@ -201,7 +200,6 @@ function KDSContent() {
 
   const init = useCallback(async () => {
     try {
-      let tid: string | null = null
       let sName: string | null = null
       let sId: string | null = null
 
@@ -209,7 +207,7 @@ function KDSContent() {
         // Authenticate with token
         const { data, error } = await supabase
           .from('kitchen_displays')
-          .select('tenant_id, name, id')
+          .select('name, id')
           .eq('token', token)
           .single()
 
@@ -218,7 +216,6 @@ function KDSContent() {
           setLoading(false)
           return
         }
-        tid = data.tenant_id
         sName = data.name
         sId = data.id
 
@@ -226,8 +223,7 @@ function KDSContent() {
         const { data: stations } = await supabase
             .from('kitchen_displays')
             .select('id, name')
-            .eq('tenant_id', tid)
-        
+
         if (stations) {
             setAvailableStations(stations)
         }
@@ -240,35 +236,20 @@ function KDSContent() {
           return
         }
 
-        const { data: userData } = await supabase
-          .from('users')
-          .select('tenant_id')
-          .eq('id', user.id)
-          .single()
+        // Fetch available stations for Admin
+        const { data: stations } = await supabase
+          .from('kitchen_displays')
+          .select('id, name')
 
-        if (userData) {
-          tid = userData.tenant_id
-          // Fetch available stations for Admin
-          const { data: stations } = await supabase
-            .from('kitchen_displays')
-            .select('id, name')
-            .eq('tenant_id', tid)
-          
-          if (stations) {
-             setAvailableStations(stations)
-          }
+        if (stations) {
+           setAvailableStations(stations)
         }
       }
 
-      if (tid) {
-        setTenantId(tid)
-        setStationName(sName)
-        setStationId(sId)
-        await loadOrders(tid, sId, sName)
-      } else {
-        setError('No tenant found')
-        setLoading(false)
-      }
+      setReady(true)
+      setStationName(sName)
+      setStationId(sId)
+      await loadOrders(sId, sName)
     } catch (err) {
       console.error('KDS Init Error:', err)
       setError('Failed to initialize KDS')
@@ -288,20 +269,20 @@ function KDSContent() {
   }, [init])
 
   useEffect(() => {
-    if (!tenantId) return
+    if (!ready) return
 
     const initialTimeoutId = window.setTimeout(() => {
-      void loadOrders(tenantId, stationId, stationName)
+      void loadOrders(stationId, stationName)
     }, 0)
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
-      void loadOrders(tenantId, stationId, stationName)
+      void loadOrders(stationId, stationName)
     }, 2000)
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        void loadOrders(tenantId, stationId, stationName)
+        void loadOrders(stationId, stationName)
       }
     }
 
@@ -312,7 +293,7 @@ function KDSContent() {
       window.clearInterval(intervalId)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [loadOrders, stationName, stationId, tenantId])
+  }, [loadOrders, stationName, stationId, ready])
 
   const updateOrderStatus = async (orderId: string, status: KDSOrderStatus) => {
     // Optimistic Update
@@ -342,7 +323,7 @@ function KDSContent() {
     if (error) {
         console.error("Failed to update order status", error)
         // Revert or reload if failed
-        if (tenantId) loadOrders(tenantId, stationId, stationName)
+        loadOrders(stationId, stationName)
     }
   }
 
@@ -361,7 +342,7 @@ function KDSContent() {
     
     if (error) {
         console.error("Failed to update item status", error)
-        if (tenantId) loadOrders(tenantId, stationId, stationName)
+        loadOrders(stationId, stationName)
     }
   }
 
@@ -470,12 +451,12 @@ function KDSContent() {
                         if (val === 'All') {
                             setStationName('All')
                             setStationId(null)
-                            if (tenantId) loadOrders(tenantId, null, 'All')
+                            loadOrders(null, 'All')
                         } else {
                             const station = availableStations.find(s => s.id === val)
                             setStationName(station ? station.name : '')
                             setStationId(val)
-                            if (tenantId) loadOrders(tenantId, val, station ? station.name : '')
+                            loadOrders(val, station ? station.name : '')
                         }
                     }}
                 >

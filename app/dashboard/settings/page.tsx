@@ -103,7 +103,6 @@ export default function SettingsPage() {
   const [creatingDiscount, setCreatingDiscount] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [tenantId, setTenantId] = useState<string | null>(null)
   const [newPaymentMethodLabel, setNewPaymentMethodLabel] = useState('')
 
   const loadData = useCallback(async () => {
@@ -111,47 +110,50 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Get tenant info
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-      
-      if (!userData?.tenant_id) return
-      setTenantId(userData.tenant_id)
+      // Fetch settings from app_settings table
+      const { data: settingsRows } = await supabase
+        .from('app_settings')
+        .select('key, value')
+        .in('key', ['currency', 'timezone', 'tax_rate', 'payment_methods', 'receipt_settings', 'features_menu'])
 
-      // Fetch tenant settings
-      const { data: tenantData } = await supabase
-        .from('tenants')
-        .select('settings')
-        .eq('id', userData.tenant_id)
-        .single()
+      if (settingsRows) {
+        const settingsMap = new Map<string, string>()
+        for (const row of settingsRows) {
+          if (row.value !== null) settingsMap.set(row.key, row.value)
+        }
 
-      if (tenantData?.settings) {
-        const loadedSettings = tenantData.settings as unknown as TenantSettings
-        setSettings(prev => ({
-          ...prev,
-          ...loadedSettings,
-          paymentMethods: Array.isArray(loadedSettings.paymentMethods) && loadedSettings.paymentMethods.length > 0
-            ? loadedSettings.paymentMethods
-            : prev.paymentMethods,
-          features: {
-            ...prev.features,
-            ...loadedSettings.features,
-          },
-          receipt: {
-            ...prev.receipt!,
-            ...loadedSettings.receipt
+        setSettings(prev => {
+          const next = { ...prev }
+          const currency = settingsMap.get('currency')
+          if (currency) next.currency = currency
+          const timezone = settingsMap.get('timezone')
+          if (timezone) next.timezone = timezone
+          const taxRate = settingsMap.get('tax_rate')
+          if (taxRate) next.tax_rate = Number(taxRate) || 0
+          const featuresMenu = settingsMap.get('features_menu')
+          if (featuresMenu !== undefined) next.features = { menu: featuresMenu === 'true' }
+          const paymentMethodsStr = settingsMap.get('payment_methods')
+          if (paymentMethodsStr) {
+            try {
+              const parsed = JSON.parse(paymentMethodsStr)
+              if (Array.isArray(parsed) && parsed.length > 0) next.paymentMethods = parsed
+            } catch { /* ignore */ }
           }
-        }))
+          const receiptStr = settingsMap.get('receipt_settings')
+          if (receiptStr) {
+            try {
+              const parsed = JSON.parse(receiptStr)
+              if (parsed && typeof parsed === 'object') next.receipt = { ...prev.receipt!, ...parsed }
+            } catch { /* ignore */ }
+          }
+          return next
+        })
       }
 
       // Fetch kitchen displays
       const { data: displaysData } = await supabase
         .from('kitchen_displays')
         .select('*')
-        .eq('tenant_id', userData.tenant_id)
         .order('created_at', { ascending: false })
 
       if (displaysData) {
@@ -162,7 +164,6 @@ export default function SettingsPage() {
       const { data: discountsData } = await supabase
         .from('discounts')
         .select('*')
-        .eq('tenant_id', userData.tenant_id)
         .order('created_at', { ascending: false })
 
       if (discountsData) {
@@ -294,36 +295,24 @@ export default function SettingsPage() {
   }
 
   const handleSaveSettings = async () => {
-    if (!tenantId) return
     setSaving(true)
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .update({ settings: settings as unknown as Record<string, unknown> })
-        .eq('id', tenantId)
-        .select('settings')
-        .maybeSingle()
+      const updates: Array<{ key: string; value: string }> = [
+        { key: 'currency', value: settings.currency },
+        { key: 'timezone', value: settings.timezone },
+        { key: 'tax_rate', value: String(settings.tax_rate) },
+        { key: 'features_menu', value: String(settings.features?.menu ?? true) },
+        { key: 'payment_methods', value: JSON.stringify(settings.paymentMethods ?? []) },
+        { key: 'receipt_settings', value: JSON.stringify(settings.receipt ?? {}) },
+      ]
 
-      if (error) throw error
-      if (!data) {
-        throw new Error('Tenant settings update was blocked (RLS)')
-      }
+      for (const { key, value } of updates) {
+        const { error } = await supabase
+          .from('app_settings')
+          .update({ value })
+          .eq('key', key)
 
-      if (data.settings) {
-        setSettings((prev) => {
-          const next = data.settings as unknown as TenantSettings
-          const nextReceipt = (next.receipt ?? {}) as Partial<ReceiptSettings>
-          return {
-            ...prev,
-            ...next,
-            receipt: prev.receipt
-              ? {
-                  ...prev.receipt,
-                  ...nextReceipt,
-                }
-              : (next.receipt as ReceiptSettings | undefined),
-          }
-        })
+        if (error) throw error
       }
 
       toast({
@@ -343,13 +332,12 @@ export default function SettingsPage() {
   }
 
   const handleCreateDisplay = async () => {
-    if (!tenantId || !newDisplayName.trim()) return
+    if (!newDisplayName.trim()) return
     setCreatingDisplay(true)
     try {
       const { data, error } = await supabase
         .from('kitchen_displays')
         .insert({
-          tenant_id: tenantId,
           name: newDisplayName,
         })
         .select()
@@ -402,13 +390,12 @@ export default function SettingsPage() {
   }
 
   const handleCreateDiscount = async () => {
-    if (!tenantId || !newDiscount.name.trim() || !newDiscount.value) return
+    if (!newDiscount.name.trim() || !newDiscount.value) return
     setCreatingDiscount(true)
     try {
       const { data, error } = await supabase
         .from('discounts')
         .insert({
-          tenant_id: tenantId,
           name: newDiscount.name,
           type: newDiscount.type,
           value: parseFloat(newDiscount.value),
@@ -498,15 +485,6 @@ export default function SettingsPage() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    if (!tenantId) {
-        toast({
-            title: 'Error',
-            description: 'Tenant ID not found',
-            variant: 'destructive'
-        })
-        return
-    }
 
     setUploadingLogo(true)
     try {

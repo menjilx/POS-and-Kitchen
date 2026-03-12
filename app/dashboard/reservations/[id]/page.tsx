@@ -1,77 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
-import type { Reservation, ReservationStatus, Table } from '@/types/database'
-
-const reservationStatuses = [
-  'pending',
-  'confirmed',
-  'seated',
-  'completed',
-  'cancelled',
-  'no_show',
-] as const
-
-async function updateReservation(formData: FormData) {
-  'use server'
-
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    throw new Error('Not authenticated')
-  }
-
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single()
-
-  if (!userData || (userData.role !== 'owner' && userData.role !== 'manager')) {
-    throw new Error('Unauthorized')
-  }
-
-  const reservationId = formData.get('reservationId') as string
-  const tableId = formData.get('tableId') as string
-  const customerName = formData.get('customerName') as string
-  const customerPhone = formData.get('customerPhone') as string
-  const customerEmail = formData.get('customerEmail') as string
-  const partySize = parseInt(formData.get('partySize') as string)
-  const reservationTime = formData.get('reservationTime') as string
-  const durationMinutes = parseInt(formData.get('durationMinutes') as string)
-  const statusRaw = String(formData.get('status') ?? '')
-  const status: ReservationStatus = (reservationStatuses as readonly string[]).includes(statusRaw)
-    ? (statusRaw as ReservationStatus)
-    : 'pending'
-  const specialRequests = formData.get('specialRequests') as string
-  const notes = formData.get('notes') as string
-
-  const { error } = await supabase
-    .from('reservations')
-    .update({
-      table_id: tableId || null,
-      customer_name: customerName,
-      customer_phone: customerPhone || null,
-      customer_email: customerEmail || null,
-      party_size: partySize,
-      reservation_time: new Date(reservationTime).toISOString(),
-      duration_minutes: durationMinutes,
-      status,
-      special_requests: specialRequests || null,
-      notes: notes || null,
-    })
-    .eq('id', reservationId)
-    .eq('tenant_id', userData.tenant_id)
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  revalidatePath('/dashboard/reservations')
-  redirect('/dashboard/reservations')
-}
+import type { Reservation, Table } from '@/types/database'
+import { updateReservation } from '../actions'
 
 export default async function EditReservationPage({
   params,
@@ -88,7 +19,7 @@ export default async function EditReservationPage({
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -101,12 +32,10 @@ export default async function EditReservationPage({
       .from('reservations')
       .select('*')
       .eq('id', id)
-      .eq('tenant_id', userData.tenant_id)
       .single(),
     supabase
       .from('tables')
       .select('*')
-      .eq('tenant_id', userData.tenant_id)
       .order('table_number'),
   ])
 

@@ -11,14 +11,6 @@ export default async function PurchasesPage() {
 
   if (!user) redirect('/login')
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single()
-
-  if (!userData) redirect('/login')
-
   const { data: purchasesData } = await supabase
     .from('purchases')
     .select(`
@@ -29,18 +21,16 @@ export default async function PurchasesPage() {
         ingredients (name, unit)
       )
     `)
-    .eq('tenant_id', userData.tenant_id)
     .order('invoice_date', { ascending: false })
     .limit(50)
 
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('settings')
-    .eq('id', userData.tenant_id)
+  const { data: currencySetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'currency')
     .single()
 
-  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
-  const currency = tenantSettings?.currency ?? 'USD'
+  const currency = currencySetting?.value ?? 'USD'
 
   const purchases = (purchasesData || []) as unknown as Purchase[]
 

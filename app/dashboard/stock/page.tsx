@@ -59,70 +59,59 @@ export default function StockPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    const [stockRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
+      supabase
+        .from('stock')
+        .select(`
+          *,
+          ingredients (name, unit, reorder_level, ingredient_categories (name))
+        `)
+        .order('quantity', { ascending: true }),
+      supabase
+        .from('locations')
+        .select('*')
+        .order('name'),
+      supabase
+        .from('menu_items')
+        .select('id, name, stock_ingredient_id')
+        .eq('item_type', 'simple')
+    ])
 
-    if (userData) {
-      const [stockRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
-        supabase
-          .from('stock')
-          .select(`
-            *,
-            ingredients (name, unit, reorder_level, ingredient_categories (name))
-          `)
-          .eq('tenant_id', userData.tenant_id)
-          .order('quantity', { ascending: true }),
-        supabase
-          .from('locations')
-          .select('*')
-          .eq('tenant_id', userData.tenant_id)
-          .order('name'),
-        supabase
-          .from('menu_items')
-          .select('id, name, stock_ingredient_id')
-          .eq('tenant_id', userData.tenant_id)
-          .eq('item_type', 'simple')
-      ])
+    const simpleMenuItems = (simpleMenuItemsRes.data ?? []) as Array<{ id: string; name: string; stock_ingredient_id: string | null }>
+    const simpleItemsMap = new Map<string, string>()
+    if (simpleMenuItems.length > 0) {
+      const nameByMenuItemId = new Map<string, string>()
+      simpleMenuItems.forEach((i) => nameByMenuItemId.set(i.id, i.name))
 
-      const simpleMenuItems = (simpleMenuItemsRes.data ?? []) as Array<{ id: string; name: string; stock_ingredient_id: string | null }>
-      const simpleItemsMap = new Map<string, string>()
-      if (simpleMenuItems.length > 0) {
-        const nameByMenuItemId = new Map<string, string>()
-        simpleMenuItems.forEach((i) => nameByMenuItemId.set(i.id, i.name))
+      simpleMenuItems.forEach((item) => {
+        if (item.stock_ingredient_id && !simpleItemsMap.has(item.stock_ingredient_id)) {
+          simpleItemsMap.set(item.stock_ingredient_id, item.name)
+        }
+      })
 
-        simpleMenuItems.forEach((item) => {
-          if (item.stock_ingredient_id && !simpleItemsMap.has(item.stock_ingredient_id)) {
-            simpleItemsMap.set(item.stock_ingredient_id, item.name)
+      const missingStockLinks = simpleMenuItems.filter((i) => !i.stock_ingredient_id)
+      if (missingStockLinks.length > 0) {
+        const { data: recipeItemsData } = await supabase
+          .from('recipe_items')
+          .select('menu_item_id, ingredient_id')
+          .in('menu_item_id', missingStockLinks.map((i) => i.id))
+
+        ;(recipeItemsData ?? []).forEach((row: { menu_item_id: string; ingredient_id: string }) => {
+          const simpleName = nameByMenuItemId.get(row.menu_item_id)
+          if (simpleName && !simpleItemsMap.has(row.ingredient_id)) {
+            simpleItemsMap.set(row.ingredient_id, simpleName)
           }
         })
-
-        const missingStockLinks = simpleMenuItems.filter((i) => !i.stock_ingredient_id)
-        if (missingStockLinks.length > 0) {
-          const { data: recipeItemsData } = await supabase
-            .from('recipe_items')
-            .select('menu_item_id, ingredient_id')
-            .in('menu_item_id', missingStockLinks.map((i) => i.id))
-
-          ;(recipeItemsData ?? []).forEach((row: { menu_item_id: string; ingredient_id: string }) => {
-            const simpleName = nameByMenuItemId.get(row.menu_item_id)
-            if (simpleName && !simpleItemsMap.has(row.ingredient_id)) {
-              simpleItemsMap.set(row.ingredient_id, simpleName)
-            }
-          })
-        }
       }
-
-      const enrichedStock = (stockRes.data || []).map((s: StockWithIngredient) => ({
-        ...s,
-        simple_item_name: simpleItemsMap.get(s.ingredient_id)
-      })) as StockWithIngredient[]
-
-      setStock(enrichedStock)
-      setLocations(locationsRes.data || [])
     }
+
+    const enrichedStock = (stockRes.data || []).map((s: StockWithIngredient) => ({
+      ...s,
+      simple_item_name: simpleItemsMap.get(s.ingredient_id)
+    })) as StockWithIngredient[]
+
+    setStock(enrichedStock)
+    setLocations(locationsRes.data || [])
   }
 
   const loadHistory = useCallback(async () => {
@@ -132,21 +121,12 @@ export default function StockPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) return
-
       const fromIso = new Date(`${historyFromDate}T00:00:00`).toISOString()
       const toIso = new Date(`${historyToDate}T23:59:59.999`).toISOString()
 
       let query = supabase
         .from('stock_adjustments')
         .select('id, created_at, adjustment_type, quantity, notes, ingredient_id, location_id, ingredients(name, unit), locations(name)')
-        .eq('tenant_id', userData.tenant_id)
         .gte('created_at', fromIso)
         .lte('created_at', toIso)
         .order('created_at', { ascending: false })
@@ -188,21 +168,12 @@ export default function StockPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const quantity = parseFloat(adjustmentForm.quantity)
       const isPositive = adjustmentForm.adjustment_type === 'adjustment' && quantity >= 0
 
       const { error: adjError } = await supabase
         .from('stock_adjustments')
         .insert({
-          tenant_id: userData.tenant_id,
           ingredient_id: adjustmentForm.ingredient_id,
           location_id: adjustmentForm.location_id,
           adjustment_type: adjustmentForm.adjustment_type,
@@ -231,7 +202,6 @@ export default function StockPage() {
         await supabase
           .from('stock')
           .insert({
-            tenant_id: userData.tenant_id,
             ingredient_id: adjustmentForm.ingredient_id,
             location_id: adjustmentForm.location_id,
             quantity: newQuantity,

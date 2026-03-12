@@ -22,13 +22,6 @@ type Crumb = {
 }
 
 const routeTitles: Record<string, string> = {
-  "/admin": "Dashboard",
-  "/admin/profile": "My Profile",
-  "/admin/settings": "Settings",
-  "/admin/tenants": "Tenants",
-  "/admin/tenants/new": "New Tenant",
-  "/admin/users": "All Users",
-  "/admin/users/new": "New Super Admin",
   "/dashboard": "Dashboard",
   "/dashboard/pos": "POS",
   "/dashboard/sales": "Sales",

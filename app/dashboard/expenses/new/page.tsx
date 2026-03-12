@@ -36,21 +36,12 @@ export default function NewExpensePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    const { data } = await supabase
+      .from('expense_categories')
+      .select('*')
+      .order('name')
 
-    if (userData) {
-      const { data } = await supabase
-        .from('expense_categories')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .order('name')
-
-      setCategories(((data ?? []) as unknown) as ExpenseCategory[])
-    }
+    setCategories(((data ?? []) as unknown) as ExpenseCategory[])
   }, [])
 
   useEffect(() => {
@@ -72,16 +63,7 @@ export default function NewExpensePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const { error } = await supabase.from('expenses').insert({
-        tenant_id: userData.tenant_id,
         category_id: formData.category_id,
         description: formData.description,
         amount: parseFloat(formData.amount),

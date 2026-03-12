@@ -38,23 +38,14 @@ export default function NewSimpleMenuItemPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    // Load categories
+    const { data: categoriesData } = await supabase
+      .from('menu_categories')
+      .select('id, name')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
 
-    if (userData) {
-      // Load categories
-      const { data: categoriesData } = await supabase
-        .from('menu_categories')
-        .select('id, name')
-        .eq('tenant_id', userData.tenant_id)
-        .order('sort_order', { ascending: true })
-        .order('name', { ascending: true })
-
-      setCategories(categoriesData ?? [])
-    }
+    setCategories(categoriesData ?? [])
   }, [])
 
   useEffect(() => {
@@ -142,18 +133,9 @@ export default function NewSimpleMenuItemPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const { data: createdIngredient, error: ingredientError } = await supabase
         .from('ingredients')
         .insert({
-          tenant_id: userData.tenant_id,
           name,
           category_id: null,
           unit,
@@ -172,7 +154,6 @@ export default function NewSimpleMenuItemPage() {
       const { data: menuItem, error: menuItemError } = await supabase
         .from('menu_items')
         .insert({
-          tenant_id: userData.tenant_id,
           name,
           description: formData.description || name,
           category: formData.category,
@@ -191,7 +172,6 @@ export default function NewSimpleMenuItemPage() {
           .from('ingredients')
           .delete()
           .eq('id', createdIngredient.id)
-          .eq('tenant_id', userData.tenant_id)
         throw menuItemError
       }
       if (!menuItem) throw new Error('Failed to create menu item')

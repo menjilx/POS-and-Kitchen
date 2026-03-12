@@ -4,13 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { Permission, DEFAULT_ROLE_PERMISSIONS, ROLES, buildPermissionsByRole } from '@/lib/permissions'
 
-export async function getRolePermissions(tenantId: string) {
+export async function getRolePermissions() {
   const supabase = await createClient()
-  
+
   const { data: customPermissions, error } = await supabase
     .from('role_permissions')
     .select('role, permissions')
-    .eq('tenant_id', tenantId)
 
   if (error) {
     console.error('Error fetching permissions:', error)
@@ -39,7 +38,7 @@ export async function updateRolePermissions(role: string, permissions: Permissio
   // Check if user is owner
   const { data: currentUser } = await supabase
     .from('users')
-    .select('role, tenant_id')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -50,11 +49,10 @@ export async function updateRolePermissions(role: string, permissions: Permissio
   const { error } = await supabase
     .from('role_permissions')
     .upsert({
-      tenant_id: currentUser.tenant_id,
       role,
       permissions
     }, {
-      onConflict: 'tenant_id, role'
+      onConflict: 'role'
     })
 
   if (error) throw new Error(error.message)

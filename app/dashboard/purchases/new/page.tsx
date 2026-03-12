@@ -60,73 +60,61 @@ export default function NewPurchasePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    const [ingredientsRes, suppliersRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
+      supabase
+        .from('ingredients')
+        .select('*')
+        .eq('status', 'active')
+        .order('name'),
+      supabase
+        .from('suppliers')
+        .select('*')
+        .order('name'),
+      supabase
+        .from('locations')
+        .select('*')
+        .order('name'),
+      supabase
+        .from('menu_items')
+        .select('id, name, stock_ingredient_id')
+        .eq('item_type', 'simple')
+        .order('name')
+    ])
 
-    if (userData) {
-      const [ingredientsRes, suppliersRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
-        supabase
-          .from('ingredients')
-          .select('*')
-          .eq('tenant_id', userData.tenant_id)
-          .eq('status', 'active')
-          .order('name'),
-        supabase
-          .from('suppliers')
-          .select('*')
-          .eq('tenant_id', userData.tenant_id)
-          .order('name'),
-        supabase
-          .from('locations')
-          .select('*')
-          .eq('tenant_id', userData.tenant_id)
-          .order('name'),
-        supabase
-          .from('menu_items')
-          .select('id, name, stock_ingredient_id')
-          .eq('tenant_id', userData.tenant_id)
-          .eq('item_type', 'simple')
-          .order('name')
-      ])
+    setIngredients(((ingredientsRes.data ?? []) as unknown) as Ingredient[])
+    setSuppliers(((suppliersRes.data ?? []) as unknown) as Supplier[])
+    setLocations(((locationsRes.data ?? []) as unknown) as Location[])
 
-      setIngredients(((ingredientsRes.data ?? []) as unknown) as Ingredient[])
-      setSuppliers(((suppliersRes.data ?? []) as unknown) as Supplier[])
-      setLocations(((locationsRes.data ?? []) as unknown) as Location[])
-
-      const simpleMenuItems = (simpleMenuItemsRes.data ?? []) as Array<{ id: string; name: string; stock_ingredient_id: string | null }>
-      if (simpleMenuItems.length === 0) {
-        setSimpleItems([])
-        return
-      }
-
-      const missingStockLinks = simpleMenuItems.filter((i) => !i.stock_ingredient_id)
-      const recipeByMenuItemId = new Map<string, string>()
-      if (missingStockLinks.length > 0) {
-        const { data: recipeItemsData } = await supabase
-          .from('recipe_items')
-          .select('menu_item_id, ingredient_id')
-          .in('menu_item_id', missingStockLinks.map((i) => i.id))
-
-        ;(recipeItemsData ?? []).forEach((row: { menu_item_id: string; ingredient_id: string }) => {
-          if (!recipeByMenuItemId.has(row.menu_item_id)) {
-            recipeByMenuItemId.set(row.menu_item_id, row.ingredient_id)
-          }
-        })
-      }
-
-      setSimpleItems(
-        simpleMenuItems
-          .map((item) => ({
-            id: item.id,
-            name: item.name,
-            ingredient_id: item.stock_ingredient_id ?? recipeByMenuItemId.get(item.id) ?? '',
-          }))
-          .filter((item) => item.ingredient_id)
-      )
+    const simpleMenuItems = (simpleMenuItemsRes.data ?? []) as Array<{ id: string; name: string; stock_ingredient_id: string | null }>
+    if (simpleMenuItems.length === 0) {
+      setSimpleItems([])
+      return
     }
+
+    const missingStockLinks = simpleMenuItems.filter((i) => !i.stock_ingredient_id)
+    const recipeByMenuItemId = new Map<string, string>()
+    if (missingStockLinks.length > 0) {
+      const { data: recipeItemsData } = await supabase
+        .from('recipe_items')
+        .select('menu_item_id, ingredient_id')
+        .in('menu_item_id', missingStockLinks.map((i) => i.id))
+
+      ;(recipeItemsData ?? []).forEach((row: { menu_item_id: string; ingredient_id: string }) => {
+        if (!recipeByMenuItemId.has(row.menu_item_id)) {
+          recipeByMenuItemId.set(row.menu_item_id, row.ingredient_id)
+        }
+      })
+    }
+
+    setSimpleItems(
+      simpleMenuItems
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          ingredient_id: item.stock_ingredient_id ?? recipeByMenuItemId.get(item.id) ?? '',
+        }))
+        .filter((item) => item.ingredient_id)
+    )
   }, [])
 
   useEffect(() => {
@@ -221,18 +209,9 @@ export default function NewPurchasePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData?.tenant_id) throw new Error('User not found')
-
       const { data: created, error: createError } = await supabase
         .from('ingredients')
         .insert({
-          tenant_id: userData.tenant_id,
           name: newStockItem.name.trim(),
           unit: newStockItem.unit.trim(),
           cost_per_unit: Number(newStockItem.cost_per_unit) || 0,
@@ -313,20 +292,11 @@ export default function NewPurchasePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const totalAmount = calculateTotals()
 
       const { data: purchase, error: purchaseError } = await supabase
         .from('purchases')
         .insert({
-          tenant_id: userData.tenant_id,
           supplier_id: formData.supplier_id || null,
           invoice_number: formData.invoice_number || null,
           invoice_date: formData.invoice_date,

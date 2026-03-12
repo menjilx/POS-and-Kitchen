@@ -25,7 +25,7 @@ export default async function SalesPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -33,30 +33,24 @@ export default async function SalesPage() {
 
   const [
     { data: salesData },
-    { data: tenantData }
+    { data: currencySetting },
+    { data: pmSetting }
   ] = await Promise.all([
     supabase
       .from('sales')
       .select('*, kds_orders(status, started_at, completed_at), sale_items(quantity)')
-      .eq('tenant_id', userData.tenant_id)
       .order('sale_time', { ascending: false })
       .limit(1000),
-    supabase
-      .from('tenants')
-      .select('settings')
-      .eq('id', userData.tenant_id)
-      .single()
+    supabase.from('app_settings').select('value').eq('key', 'currency').single(),
+    supabase.from('app_settings').select('value').eq('key', 'payment_methods').single()
   ])
 
-  const tenantSettings = tenantData?.settings as unknown as {
-    currency?: string
-    paymentMethods?: PaymentMethodOption[]
-  } | null
-  const currency = tenantSettings?.currency ?? 'USD'
-  const paymentMethods =
-    Array.isArray(tenantSettings?.paymentMethods) && tenantSettings.paymentMethods.length > 0
-      ? tenantSettings.paymentMethods
-      : defaultPaymentMethods
+  const currency = currencySetting?.value ?? 'USD'
+  let paymentMethods: PaymentMethodOption[] = defaultPaymentMethods
+  try {
+    const parsed = pmSetting?.value ? JSON.parse(pmSetting.value) : []
+    if (Array.isArray(parsed) && parsed.length > 0) paymentMethods = parsed
+  } catch {}
   
   // Cast salesData to match the Sale type required by columns
   // We know the shape matches because of the select query

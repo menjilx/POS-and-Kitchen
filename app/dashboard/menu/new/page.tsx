@@ -44,33 +44,23 @@ export default function NewMenuItemPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    // Load ingredients
+    const { data: ingredientsData } = await supabase
+      .from('ingredients')
+      .select('*')
+      .eq('status', 'active')
+      .order('name')
 
-    if (userData) {
-      // Load ingredients
-      const { data: ingredientsData } = await supabase
-        .from('ingredients')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .eq('status', 'active')
-        .order('name')
+    setIngredients(((ingredientsData ?? []) as unknown) as Ingredient[])
 
-      setIngredients(((ingredientsData ?? []) as unknown) as Ingredient[])
+    // Load categories
+    const { data: categoriesData } = await supabase
+      .from('menu_categories')
+      .select('id, name')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
 
-      // Load categories
-      const { data: categoriesData } = await supabase
-        .from('menu_categories')
-        .select('id, name')
-        .eq('tenant_id', userData.tenant_id)
-        .order('sort_order', { ascending: true })
-        .order('name', { ascending: true })
-
-      setCategories(categoriesData ?? [])
-    }
+    setCategories(categoriesData ?? [])
   }, [])
 
   useEffect(() => {
@@ -194,18 +184,9 @@ export default function NewMenuItemPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const { data: menuItem } = await supabase
         .from('menu_items')
         .insert({
-          tenant_id: userData.tenant_id,
           name: formData.name,
           description: formData.description,
           category: formData.category,

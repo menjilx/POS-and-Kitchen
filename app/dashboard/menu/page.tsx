@@ -12,7 +12,7 @@ export default async function MenuPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -22,28 +22,21 @@ export default async function MenuPage() {
 
   const [
     { data: menuItems },
-    { data: tenantData }
+    { data: menuSetting },
+    { data: currencySetting }
   ] = await Promise.all([
     supabase
       .from('menu_items')
       .select('*')
-      .eq('tenant_id', userData.tenant_id)
       .eq('item_type', 'standard')
       .order('name'),
-    supabase
-      .from('tenants')
-      .select('settings')
-      .eq('id', userData.tenant_id)
-      .single()
+    supabase.from('app_settings').select('value').eq('key', 'features_menu').single(),
+    supabase.from('app_settings').select('value').eq('key', 'currency').single()
   ])
 
-  const tenantSettings = tenantData?.settings as unknown as {
-    currency?: string
-    features?: { menu?: boolean }
-  } | null
-  const menuEnabled = tenantSettings?.features?.menu ?? true
+  const menuEnabled = menuSetting?.value !== 'false'
   if (!menuEnabled) redirect('/dashboard')
-  const currency = tenantSettings?.currency ?? 'USD'
+  const currency = currencySetting?.value ?? 'USD'
 
   return (
     <div className="space-y-6">

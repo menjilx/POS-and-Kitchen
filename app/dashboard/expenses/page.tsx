@@ -12,7 +12,7 @@ export default async function ExpensesPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -26,18 +26,11 @@ export default async function ExpensesPage() {
       *,
       expense_categories (name)
     `)
-    .eq('tenant_id', userData.tenant_id)
     .order('expense_date', { ascending: false })
     .limit(100)
 
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('settings')
-    .eq('id', userData.tenant_id)
-    .single()
-
-  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
-  const currency = tenantSettings?.currency ?? 'USD'
+  const { data: currencySetting } = await supabase.from('app_settings').select('value').eq('key', 'currency').single()
+  const currency = currencySetting?.value ?? 'USD'
 
   const expenses = (expensesData || []) as unknown as Expense[]
 

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kitchen System",
+  title: "POS + Kitchen System",
   description: "Restaurant Management System",
 };
 

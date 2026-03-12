@@ -50,18 +50,17 @@ export default async function DashboardLayoutWrapper({
     )
   }
 
-  const { data: tenantData } = userData.tenant_id
-    ? await supabase
-        .from('tenants')
-        .select('name')
-        .eq('id', userData.tenant_id)
-        .single()
-    : { data: null }
+  // Fetch app name from app_settings
+  const { data: appNameSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'app_name')
+    .single()
 
-  const tenantName = tenantData?.name ?? 'Restaurant'
+  const appName = appNameSetting?.value ?? 'Restaurant'
 
   return (
-    <DashboardLayout user={userData} tenantName={tenantName}>
+    <DashboardLayout user={userData} appName={appName}>
       {children}
     </DashboardLayout>
   )

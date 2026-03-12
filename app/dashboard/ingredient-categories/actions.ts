@@ -11,7 +11,7 @@ export async function archiveCategory(categoryId: string) {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -23,7 +23,6 @@ export async function archiveCategory(categoryId: string) {
     .from('ingredient_categories')
     .update({ status: 'archived' })
     .eq('id', categoryId)
-    .eq('tenant_id', userData.tenant_id)
 
   if (error) throw new Error(error.message)
 
@@ -38,7 +37,7 @@ export async function restoreCategory(categoryId: string) {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -50,7 +49,6 @@ export async function restoreCategory(categoryId: string) {
     .from('ingredient_categories')
     .update({ status: 'active' })
     .eq('id', categoryId)
-    .eq('tenant_id', userData.tenant_id)
 
   if (error) throw new Error(error.message)
 

@@ -33,10 +33,9 @@ const isCanonicalWalkInCustomerName = (value: string) => normalizeCustomerName(v
 interface CustomerDialogProps {
   selectedCustomer: Customer | null
   onSelect: (customer: Customer | null) => void
-  tenantId?: string | null
 }
 
-export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: CustomerDialogProps) {
+export function CustomerDialog({ selectedCustomer, onSelect }: CustomerDialogProps) {
   const [open, setOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -63,10 +62,6 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
         .order('name')
         .limit(20)
 
-      if (tenantId) {
-        queryBuilder = queryBuilder.eq('tenant_id', tenantId)
-      }
-
       if (query) {
         queryBuilder = queryBuilder.or(`name.ilike.%${query}%,phone.ilike.%${query}%,email.ilike.%${query}%`)
       }
@@ -90,7 +85,7 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
     } finally {
       setLoading(false)
     }
-  }, [tenantId, toast])
+  }, [toast])
 
   useEffect(() => {
     if (open && !isCreating) {
@@ -119,26 +114,9 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
 
     setCreating(true)
     try {
-      let targetTenantId = tenantId
-
-      if (!targetTenantId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) return
-
-          const { data: userData } = await supabase
-            .from("users")
-            .select("tenant_id")
-            .eq("id", user.id)
-            .single()
-            
-          if (!userData?.tenant_id) throw new Error("No tenant found")
-          targetTenantId = userData.tenant_id
-      }
-
       const { data, error } = await supabase
         .from('customers')
         .insert({
-          tenant_id: targetTenantId,
           name: newCustomer.name,
           phone: newCustomer.phone || null,
           email: newCustomer.email || null,
@@ -173,26 +151,9 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
   const handleSelectWalkIn = async () => {
     setLoading(true)
     try {
-      let targetTenantId = tenantId
-
-      if (!targetTenantId) {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) return
-
-          const { data: userData } = await supabase
-            .from("users")
-            .select("tenant_id")
-            .eq("id", user.id)
-            .single()
-            
-          if (!userData?.tenant_id) throw new Error("No tenant found")
-          targetTenantId = userData.tenant_id
-      }
-
       const { data: existing, error: existingError } = await supabase
         .from('customers')
         .select('*')
-        .eq('tenant_id', targetTenantId)
         .in('name', ['Walk-in', 'Walk in', 'Walk-in Customer', 'Walkin', 'Walkin Customer'])
         .limit(10)
 
@@ -206,7 +167,6 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
           const { data: existingCanonical } = await supabase
             .from('customers')
             .select('id')
-            .eq('tenant_id', targetTenantId)
             .eq('name', 'Walk-in')
             .maybeSingle()
 
@@ -227,7 +187,6 @@ export function CustomerDialog({ selectedCustomer, onSelect, tenantId }: Custome
       const { data: newWalkIn, error } = await supabase
         .from('customers')
         .insert({
-          tenant_id: targetTenantId,
           name: 'Walk-in',
           is_active: true,
           notes: 'Default customer for walk-in sales'

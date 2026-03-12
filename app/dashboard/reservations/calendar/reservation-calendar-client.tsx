@@ -1,23 +1,35 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { addDays, addMinutes, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, parseISO, startOfDay, startOfMonth, startOfWeek } from 'date-fns'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
+import { updateReservation } from '../actions'
 
 type CalendarView = 'day' | 'week' | 'month'
+
+type TableRow = {
+  id: string
+  table_number: string
+  capacity: number
+}
 
 type ReservationRow = {
   id: string
   customer_name: string
+  customer_phone?: string | null
+  customer_email?: string | null
   reservation_time: string
   duration_minutes: number
   status: string
   party_size: number
+  table_id?: string | null
+  special_requests?: string | null
+  notes?: string | null
   tables?: { table_number: string; capacity: number } | null
 }
 
@@ -65,14 +77,18 @@ export function ReservationCalendarClient({
   initialView,
   initialDate,
   reservations,
+  tables,
 }: {
   initialView: CalendarView
   initialDate: string
   reservations: ReservationRow[]
+  tables: TableRow[]
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [localView, setLocalView] = useState<CalendarView>(initialView)
+  const [selectedReservation, setSelectedReservation] = useState<ReservationRow | null>(null)
+  const [isPending, startTransition] = useTransition()
 
   const activeDate = useMemo(() => {
     const raw = searchParams.get('date') ?? initialDate
@@ -220,16 +236,17 @@ export function ReservationCalendarClient({
                   </div>
                   <div className="mt-2 space-y-1">
                     {show.map((r) => (
-                      <Link
+                      <button
                         key={r.id}
-                        href={`/dashboard/reservations/${r.id}`}
-                        className="block truncate rounded-sm bg-primary/10 px-2 py-1 text-xs hover:bg-primary/15"
+                        type="button"
+                        onClick={() => setSelectedReservation(r)}
+                        className="block w-full text-left truncate rounded-sm bg-primary/10 px-2 py-1 text-xs hover:bg-primary/15"
                       >
                         {getReservationRangeLabel(r)}
                         {r.tables?.table_number ? ` · T${r.tables.table_number}` : ''}
                         {' '}
                         {r.customer_name}
-                      </Link>
+                      </button>
                     ))}
                     {remaining > 0 && (
                       <div className="text-xs text-muted-foreground">+{remaining} more</div>
@@ -276,16 +293,17 @@ export function ReservationCalendarClient({
                         <div key={`${dayKey}-${slot}`} className="bg-background px-2 py-2 align-top">
                           <div className="space-y-1">
                             {list.map((r) => (
-                              <Link
+                              <button
                                 key={r.id}
-                                href={`/dashboard/reservations/${r.id}`}
-                                className="block truncate rounded-sm bg-primary/10 px-2 py-1 text-xs hover:bg-primary/15"
+                                type="button"
+                                onClick={() => setSelectedReservation(r)}
+                                className="block w-full text-left truncate rounded-sm bg-primary/10 px-2 py-1 text-xs hover:bg-primary/15"
                               >
                                 {getReservationRangeLabel(r)}
                                 {r.tables?.table_number ? ` · T${r.tables.table_number}` : ''}
                                 {' '}
                                 {r.customer_name}
-                              </Link>
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -315,16 +333,17 @@ export function ReservationCalendarClient({
                   <div className="bg-background px-2 py-2">
                     <div className="space-y-1">
                       {list.map((r) => (
-                        <Link
+                        <button
                           key={r.id}
-                          href={`/dashboard/reservations/${r.id}`}
-                          className="block truncate rounded-sm bg-primary/10 px-2 py-1 text-xs hover:bg-primary/15"
+                          type="button"
+                          onClick={() => setSelectedReservation(r)}
+                          className="block w-full text-left truncate rounded-sm bg-primary/10 px-2 py-1 text-xs hover:bg-primary/15"
                         >
                           {getReservationRangeLabel(r)}
                           {r.tables?.table_number ? ` · T${r.tables.table_number}` : ''}
                           {' '}
                           {r.customer_name}
-                        </Link>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -334,6 +353,192 @@ export function ReservationCalendarClient({
           </div>
         )}
       </div>
+
+      <Dialog open={!!selectedReservation} onOpenChange={(open) => { if (!open) setSelectedReservation(null) }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Reservation</DialogTitle>
+            <DialogDescription>Update reservation details below.</DialogDescription>
+          </DialogHeader>
+          {selectedReservation && (
+            <form
+              action={async (formData) => {
+                startTransition(async () => {
+                  try {
+                    await updateReservation(formData)
+                  } catch {
+                    // redirect throws in server actions — refresh on success
+                  }
+                  setSelectedReservation(null)
+                  router.refresh()
+                })
+              }}
+              className="space-y-6"
+            >
+              <input type="hidden" name="reservationId" value={selectedReservation.id} />
+              <input type="hidden" name="redirectTo" value="" />
+
+              <div>
+                <label htmlFor="modal-customerName" className="block text-sm font-medium mb-2">
+                  Customer Name *
+                </label>
+                <input
+                  id="modal-customerName"
+                  type="text"
+                  name="customerName"
+                  required
+                  defaultValue={selectedReservation.customer_name ?? ''}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="modal-customerPhone" className="block text-sm font-medium mb-2">
+                    Phone
+                  </label>
+                  <input
+                    id="modal-customerPhone"
+                    type="tel"
+                    name="customerPhone"
+                    defaultValue={selectedReservation.customer_phone ?? ''}
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="modal-customerEmail" className="block text-sm font-medium mb-2">
+                    Email
+                  </label>
+                  <input
+                    id="modal-customerEmail"
+                    type="email"
+                    name="customerEmail"
+                    defaultValue={selectedReservation.customer_email ?? ''}
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label htmlFor="modal-partySize" className="block text-sm font-medium mb-2">
+                    Party Size *
+                  </label>
+                  <input
+                    id="modal-partySize"
+                    type="number"
+                    name="partySize"
+                    min="1"
+                    required
+                    defaultValue={selectedReservation.party_size ?? 1}
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="modal-reservationTime" className="block text-sm font-medium mb-2">
+                    Date & Time *
+                  </label>
+                  <input
+                    id="modal-reservationTime"
+                    type="datetime-local"
+                    name="reservationTime"
+                    required
+                    defaultValue={
+                      selectedReservation.reservation_time
+                        ? new Date(selectedReservation.reservation_time).toISOString().slice(0, 16)
+                        : ''
+                    }
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="modal-durationMinutes" className="block text-sm font-medium mb-2">
+                    Duration (min)
+                  </label>
+                  <input
+                    id="modal-durationMinutes"
+                    type="number"
+                    name="durationMinutes"
+                    min="15"
+                    defaultValue={selectedReservation.duration_minutes ?? 90}
+                    className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="modal-tableId" className="block text-sm font-medium mb-2">
+                  Table
+                </label>
+                <select
+                  id="modal-tableId"
+                  name="tableId"
+                  defaultValue={selectedReservation.table_id || ''}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Select table (optional)</option>
+                  {tables.map((table) => (
+                    <option key={table.id} value={table.id}>
+                      Table {table.table_number} (Capacity: {table.capacity})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="modal-status" className="block text-sm font-medium mb-2">
+                  Status
+                </label>
+                <select
+                  id="modal-status"
+                  name="status"
+                  defaultValue={selectedReservation.status ?? 'pending'}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="seated">Seated</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="no_show">No Show</option>
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="modal-specialRequests" className="block text-sm font-medium mb-2">
+                  Special Requests
+                </label>
+                <textarea
+                  id="modal-specialRequests"
+                  name="specialRequests"
+                  defaultValue={selectedReservation.special_requests ?? ''}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  rows={3}
+                  placeholder="e.g., Birthday celebration, dietary restrictions..."
+                />
+              </div>
+
+              <div>
+                <label htmlFor="modal-notes" className="block text-sm font-medium mb-2">
+                  Notes
+                </label>
+                <textarea
+                  id="modal-notes"
+                  name="notes"
+                  defaultValue={selectedReservation.notes ?? ''}
+                  className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                  rows={3}
+                  placeholder="Internal notes..."
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={isPending}>
+                {isPending ? 'Updating...' : 'Update Reservation'}
+              </Button>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

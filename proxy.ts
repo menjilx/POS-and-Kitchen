@@ -2,19 +2,13 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-function createClient(request: NextRequest, cookieName?: string) {
+function createClient(request: NextRequest) {
   let cookiesToSet: Parameters<NextResponse['cookies']['set']>[] = []
 
   const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookieOptions: {
-        name: cookieName,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-      },
       cookies: {
         getAll() {
           return request.cookies.getAll()
@@ -45,38 +39,6 @@ export async function proxy(request: NextRequest) {
         "cache-control": "no-store",
       },
     })
-  }
-
-  // Handle Admin Routes with Admin Client
-  if (path.startsWith('/admin')) {
-    const { client: supabaseAdmin, applyCookies } = createClient(request, 'sb-superadmin-token')
-    const { data: { session } } = await supabaseAdmin.auth.getSession()
-
-    if (path === '/admin/login') {
-      if (session) {
-        const { data: isSuperAdmin } = await supabaseAdmin.rpc('is_superadmin')
-        if (isSuperAdmin === true) {
-          return applyCookies(NextResponse.redirect(new URL('/admin', request.url)))
-        }
-      }
-      return applyCookies(NextResponse.next())
-    }
-
-    // Protected Admin Routes
-    if (!session) {
-      const loginUrl = new URL('/admin/login', request.url)
-      loginUrl.searchParams.set('redirectTo', path)
-      return applyCookies(NextResponse.redirect(loginUrl))
-    }
-
-    const { data: isSuperAdmin } = await supabaseAdmin.rpc('is_superadmin')
-
-    if (isSuperAdmin !== true) {
-      const loginUrl = new URL('/admin/login', request.url)
-      return applyCookies(NextResponse.redirect(loginUrl))
-    }
-
-    return applyCookies(NextResponse.next())
   }
 
   // Handle Standard Routes with Default Client

@@ -150,17 +150,8 @@ export default function ReportsPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
-
-    if (!userData) return
-
     if (activeTab === 'pnl') {
       const { data } = await supabase.rpc('get_profit_loss', {
-        p_tenant_id: userData.tenant_id,
         p_start_date: dateRange.start,
         p_end_date: dateRange.end,
       })
@@ -168,14 +159,12 @@ export default function ReportsPage() {
       setPnlData(rows[0] ?? null)
     } else if (activeTab === 'menu') {
       const { data } = await supabase.rpc('get_menu_performance', {
-        p_tenant_id: userData.tenant_id,
         p_start_date: dateRange.start,
         p_end_date: dateRange.end,
       })
       setMenuPerformance(((data ?? []) as unknown) as MenuPerformanceRow[])
     } else if (activeTab === 'ingredients') {
       const { data } = await supabase.rpc('get_stock_item_cost_trends', {
-        p_tenant_id: userData.tenant_id,
         p_start_date: dateRange.start,
         p_end_date: dateRange.end,
       })

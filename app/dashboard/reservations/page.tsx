@@ -10,7 +10,7 @@ export default async function ReservationsPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 

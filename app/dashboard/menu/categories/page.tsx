@@ -11,7 +11,7 @@ export default async function MenuCategoriesPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -19,22 +19,16 @@ export default async function MenuCategoriesPage() {
     redirect('/dashboard')
   }
 
-  const [{ data: categories }, { data: tenantData }] = await Promise.all([
+  const [{ data: categories }, { data: menuSetting }] = await Promise.all([
     supabase
       .from('menu_categories')
       .select('*')
-      .eq('tenant_id', userData.tenant_id)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true }),
-    supabase
-      .from('tenants')
-      .select('settings')
-      .eq('id', userData.tenant_id)
-      .single(),
+    supabase.from('app_settings').select('value').eq('key', 'features_menu').single(),
   ])
 
-  const tenantSettings = tenantData?.settings as unknown as { features?: { menu?: boolean } } | null
-  const menuEnabled = tenantSettings?.features?.menu ?? true
+  const menuEnabled = menuSetting?.value !== 'false'
   if (!menuEnabled) redirect('/dashboard')
 
   return (

@@ -56,7 +56,7 @@ export default async function ReservationCalendarPage({
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -66,18 +66,24 @@ export default async function ReservationCalendarPage({
 
   const { start, end } = getFetchRange(view, date)
 
-  const { data: reservations } = await supabase
-    .from('reservations')
-    .select(`
-      *,
-      tables (table_number, capacity)
-    `)
-    .eq('tenant_id', userData.tenant_id)
-    .gte('reservation_time', start.toISOString())
-    .lt('reservation_time', end.toISOString())
-    .order('reservation_time', { ascending: true })
+  const [{ data: reservations }, { data: tables }] = await Promise.all([
+    supabase
+      .from('reservations')
+      .select(`
+        *,
+        tables (table_number, capacity)
+      `)
+      .gte('reservation_time', start.toISOString())
+      .lt('reservation_time', end.toISOString())
+      .order('reservation_time', { ascending: true }),
+    supabase
+      .from('tables')
+      .select('*')
+      .order('table_number'),
+  ])
 
   const reservationRows = (reservations ?? []) as ReservationRow[]
+  const tableRows = (tables ?? []) as Table[]
 
   return (
     <div className="space-y-6">
@@ -96,7 +102,7 @@ export default async function ReservationCalendarPage({
         </Link>
       </div>
 
-      <ReservationCalendarClient initialView={view} initialDate={date.toISOString()} reservations={reservationRows} />
+      <ReservationCalendarClient initialView={view} initialDate={date.toISOString()} reservations={reservationRows} tables={tableRows} />
     </div>
   )
 }

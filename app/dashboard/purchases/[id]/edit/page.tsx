@@ -35,7 +35,6 @@ type PurchaseAttachment = {
   file_type: string
   created_at: string
   purchase_id: string
-  tenant_id: string
 }
 
 export default function EditPurchasePage({ params }: { params: Promise<{ id: string }> }) {
@@ -65,38 +64,24 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) {
-        throw new Error('User not found')
-      }
-
       // Fetch master data
       const [ingredientsRes, suppliersRes, locationsRes, simpleMenuItemsRes] = await Promise.all([
         supabase
           .from('ingredients')
           .select('*')
-          .eq('tenant_id', userData.tenant_id)
           .eq('status', 'active')
           .order('name'),
         supabase
           .from('suppliers')
           .select('*')
-          .eq('tenant_id', userData.tenant_id)
           .order('name'),
         supabase
           .from('locations')
           .select('*')
-          .eq('tenant_id', userData.tenant_id)
           .order('name'),
         supabase
           .from('menu_items')
           .select('id, name, stock_ingredient_id')
-          .eq('tenant_id', userData.tenant_id)
           .eq('item_type', 'simple')
           .order('name'),
       ])
@@ -152,7 +137,6 @@ export default function EditPurchasePage({ params }: { params: Promise<{ id: str
           purchase_attachments (*)
         `)
         .eq('id', id)
-        .eq('tenant_id', userData.tenant_id)
         .single()
 
       if (purchaseError) throw purchaseError

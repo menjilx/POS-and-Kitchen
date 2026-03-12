@@ -131,15 +131,6 @@ export function LoginForm({
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Signing in..." : "Login"}
               </Button>
-              <Button type="button" variant="outline" className="w-full">
-                Login with Google
-              </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <Link href="/signup" className="underline underline-offset-4">
-                Sign up
-              </Link>
             </div>
           </form>
         </CardContent>

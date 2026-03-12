@@ -32,21 +32,12 @@ export default function NewReservationPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    const { data } = await supabase
+      .from('tables')
+      .select('*')
+      .order('table_number')
 
-    if (userData) {
-      const { data } = await supabase
-        .from('tables')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .order('table_number')
-
-      setTables(((data ?? []) as unknown) as Table[])
-    }
+    setTables(((data ?? []) as unknown) as Table[])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -58,16 +49,7 @@ export default function NewReservationPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const { error } = await supabase.from('reservations').insert({
-        tenant_id: userData.tenant_id,
         table_id: formData.table_id || null,
         customer_name: formData.customer_name,
         customer_phone: formData.customer_phone,

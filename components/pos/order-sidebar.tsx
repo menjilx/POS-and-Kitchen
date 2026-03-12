@@ -71,7 +71,6 @@ interface OrderSidebarProps {
   customDiscount?: { type: 'percentage' | 'fixed', value: number }
   setCustomDiscount?: (discount: { type: 'percentage' | 'fixed', value: number }) => void
   onTaxChange?: (rate: number) => void
-  tenantId?: string | null
   onSendToKitchen: (destination?: string, options?: { holdAfterSend?: boolean }) => void
   kitchenDisplays?: { id: string, name: string }[]
 }
@@ -103,7 +102,6 @@ export function OrderSidebar({
   customDiscount = { type: 'percentage', value: 0 },
   setCustomDiscount,
   onTaxChange,
-  tenantId,
   onSendToKitchen,
   kitchenDisplays = []
 }: OrderSidebarProps) {
@@ -183,10 +181,9 @@ export function OrderSidebar({
       <div className="p-4 border-b space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <CustomerDialog 
-                selectedCustomer={selectedCustomer} 
-                onSelect={onSelectCustomer} 
-                tenantId={tenantId}
+            <CustomerDialog
+                selectedCustomer={selectedCustomer}
+                onSelect={onSelectCustomer}
             />
           </div>
           {orderType === "dine_in" && (

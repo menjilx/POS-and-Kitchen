@@ -11,7 +11,7 @@ export default async function SuppliersPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -22,7 +22,6 @@ export default async function SuppliersPage() {
   const { data: suppliers } = await supabase
     .from('suppliers')
     .select('*')
-    .eq('tenant_id', userData.tenant_id)
     .order('name')
 
   return (

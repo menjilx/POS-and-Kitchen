@@ -46,7 +46,7 @@ type User = {
   status: string
   last_login: string | null
   created_at: string
-  tenant_id: string
+
 }
 
 type RolePermissions = Record<Role, Permission[]>

@@ -31,21 +31,12 @@ export default function StocktakePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    const { data } = await supabase
+      .from('locations')
+      .select('*')
+      .order('name')
 
-    if (userData) {
-      const { data } = await supabase
-        .from('locations')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .order('name')
-
-      setLocations(data || [])
-    }
+    setLocations(data || [])
   }
 
   const loadStockItems = useCallback(async () => {
@@ -54,47 +45,37 @@ export default function StocktakePage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    // Fetch all active ingredients
+    const { data: ingredients } = await supabase
+      .from('ingredients')
+      .select('*')
+      .eq('status', 'active')
+      .order('name')
 
-    if (userData) {
-      // Fetch all active ingredients
-      const { data: ingredients } = await supabase
-        .from('ingredients')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .eq('status', 'active')
-        .order('name')
+    // Fetch current stock for this location
+    const { data: currentStock } = await supabase
+      .from('stock')
+      .select('*')
+      .eq('location_id', formData.location_id)
 
-      // Fetch current stock for this location
-      const { data: currentStock } = await supabase
-        .from('stock')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .eq('location_id', formData.location_id)
+    if (ingredients) {
+      const items: StockItem[] = ingredients.map((ing) => {
+        const stockEntry = currentStock?.find((s) => s.ingredient_id === ing.id)
+        const quantity = stockEntry ? Number(stockEntry.quantity) : 0
 
-      if (ingredients) {
-        const items: StockItem[] = ingredients.map((ing) => {
-          const stockEntry = currentStock?.find((s) => s.ingredient_id === ing.id)
-          const quantity = stockEntry ? Number(stockEntry.quantity) : 0
+        return {
+          id: ing.id,
+          ingredient_id: ing.id,
+          ingredient_name: ing.name,
+          unit: ing.unit,
+          expected_quantity: quantity,
+          actual_quantity: quantity,
+          variance: 0,
+          variance_percentage: 0,
+        }
+      })
 
-          return {
-            id: ing.id,
-            ingredient_id: ing.id,
-            ingredient_name: ing.name,
-            unit: ing.unit,
-            expected_quantity: quantity,
-            actual_quantity: quantity,
-            variance: 0,
-            variance_percentage: 0,
-          }
-        })
-
-        setStockItems(items)
-      }
+      setStockItems(items)
     }
   }, [formData.location_id])
 
@@ -147,18 +128,9 @@ export default function StocktakePage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const { data: stocktake } = await supabase
         .from('stocktakes')
         .insert({
-          tenant_id: userData.tenant_id,
           location_id: formData.location_id,
           date: new Date().toISOString(),
           performed_by: user.id,
@@ -184,7 +156,6 @@ export default function StocktakePage() {
 
       // Update actual stock levels
       const stockUpdates = stockItems.map(item => ({
-        tenant_id: userData.tenant_id,
         location_id: formData.location_id,
         ingredient_id: item.id,
         quantity: item.actual_quantity,

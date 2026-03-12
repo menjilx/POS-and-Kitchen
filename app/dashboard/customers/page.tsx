@@ -45,7 +45,6 @@ export default async function CustomersPage() {
   const { data: customersData } = await supabase
     .from('customers')
     .select('*')
-    .eq('tenant_id', currentUser.tenant_id)
     .order('created_at', { ascending: false })
 
   const allCustomers = (customersData || []) as Array<Record<string, unknown>>

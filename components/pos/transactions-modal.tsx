@@ -97,7 +97,6 @@ export function TransactionsModal({
           tables (table_number),
           sale_items (quantity)
         `)
-        .eq('tenant_id', session.tenant_id)
         .eq('created_by', session.user_id)
         .gte('created_at', session.opening_time)
         .order('created_at', { ascending: false })

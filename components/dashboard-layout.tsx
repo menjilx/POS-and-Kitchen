@@ -10,10 +10,10 @@ import type { User } from '@/types/database'
 interface DashboardLayoutProps {
   children: ReactNode
   user: User
-  tenantName: string
+  appName: string
 }
 
-export default function DashboardLayout({ children, user, tenantName }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, user, appName }: DashboardLayoutProps) {
   return (
     <SidebarProvider
       style={
@@ -23,7 +23,7 @@ export default function DashboardLayout({ children, user, tenantName }: Dashboar
         } as CSSProperties
       }
     >
-      <AppSidebar user={user} tenantName={tenantName} variant="inset" />
+      <AppSidebar user={user} appName={appName} variant="inset" />
       <SidebarInset>
         <SiteHeader />
         <div className="flex flex-1 flex-col">

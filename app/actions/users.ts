@@ -41,7 +41,6 @@ export async function updateUser(formData: FormData) {
       .from('users')
       .update({ role, status })
       .eq('id', userId)
-      .eq('tenant_id', currentUser.tenant_id)
 
     if (error) throw new Error(error.message)
 
@@ -79,7 +78,6 @@ export async function inviteUser(formData: FormData) {
     const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       redirectTo: inviteUrl,
       data: {
-        tenant_id: currentUser.tenant_id,
         role: role,
         full_name: '', // Optional
       }

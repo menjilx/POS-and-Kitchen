@@ -26,9 +26,8 @@ export default async function UsersPage() {
     supabase
       .from('users')
       .select('*')
-      .eq('tenant_id', currentUser.tenant_id)
       .order('created_at', { ascending: false }),
-    getRolePermissions(currentUser.tenant_id)
+    getRolePermissions()
   ])
 
   const users = usersResult.data

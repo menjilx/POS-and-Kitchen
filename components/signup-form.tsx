@@ -20,11 +20,9 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { supabase } from "@/lib/supabase/client";
 import { ArrowLeft } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
-  restaurantName: z.string().min(1, "Restaurant name is required"),
   fullName: z.string().min(1, "Full name is required"),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters long"),
@@ -37,7 +35,6 @@ const SignUpForm = () => {
 
   const form = useForm<z.infer<typeof formSchema>>({
     defaultValues: {
-      restaurantName: "",
       fullName: "",
       email: "",
       password: "",
@@ -49,27 +46,12 @@ const SignUpForm = () => {
     setLoading(true);
 
     try {
-      // Generate a UUID for the tenant client-side to avoid needing to SELECT it back
-      // (which requires RLS permissions that the anonymous user doesn't have yet)
-      const tenantId = uuidv4();
-
-      const { error: tenantError } = await supabase
-        .from("tenants")
-        .insert({
-          id: tenantId,
-          name: data.restaurantName,
-          email: data.email,
-        });
-
-      if (tenantError) throw tenantError;
-
       const { error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
             full_name: data.fullName,
-            tenant_id: tenantId,
             role: "owner",
             status: "active",
           },
@@ -77,9 +59,6 @@ const SignUpForm = () => {
       });
 
       if (authError) throw authError;
-
-      // User profile is created automatically by database trigger
-      // No need to manually insert into "users" table here
 
       toast({
         title: "Account created",
@@ -176,25 +155,6 @@ const SignUpForm = () => {
               className="w-full space-y-4"
               onSubmit={form.handleSubmit(onSubmit)}
             >
-              <FormField
-                control={form.control}
-                name="restaurantName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Restaurant Name</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="My Restaurant"
-                        className="w-full"
-                        {...field}
-                        disabled={loading}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
               <FormField
                 control={form.control}
                 name="fullName"

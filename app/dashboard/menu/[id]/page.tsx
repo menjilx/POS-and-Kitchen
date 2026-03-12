@@ -70,49 +70,39 @@ export default function EditMenuItemPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('id', user.id)
-      .single()
+    // Load ingredients
+    const { data: ingredientsData } = await supabase
+      .from('ingredients')
+      .select('*')
+      .eq('status', 'active')
+      .order('name')
 
-    if (userData) {
-      // Load ingredients
-      const { data: ingredientsData } = await supabase
-        .from('ingredients')
-        .select('*')
-        .eq('tenant_id', userData.tenant_id)
-        .eq('status', 'active')
-        .order('name')
+    setIngredients(((ingredientsData ?? []) as unknown) as Ingredient[])
 
-      setIngredients(((ingredientsData ?? []) as unknown) as Ingredient[])
+    // Load categories
+    const { data: categoriesData } = await supabase
+      .from('menu_categories')
+      .select('id, name')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
 
-      // Load categories
-      const { data: categoriesData } = await supabase
-        .from('menu_categories')
-        .select('id, name')
-        .eq('tenant_id', userData.tenant_id)
-        .order('sort_order', { ascending: true })
-        .order('name', { ascending: true })
+    setCategories(categoriesData ?? [])
 
-      setCategories(categoriesData ?? [])
-
-      if (params.id) {
-        const [menuItem, recipes] = await Promise.all([
-          supabase
-            .from('menu_items')
-            .select('*')
-            .eq('id', params.id)
-            .eq('tenant_id', userData.tenant_id)
-            .single(),
-          supabase
-            .from('recipe_items')
-            .select(`
-              *,
-              ingredients (name)
-            `)
-            .eq('menu_item_id', params.id),
-        ])
+    if (params.id) {
+      const [menuItem, recipes] = await Promise.all([
+        supabase
+          .from('menu_items')
+          .select('*')
+          .eq('id', params.id)
+          .single(),
+        supabase
+          .from('recipe_items')
+          .select(`
+            *,
+            ingredients (name)
+          `)
+          .eq('menu_item_id', params.id),
+      ])
 
         if (menuItem?.data) {
           setItemType((menuItem.data.item_type as 'standard' | 'simple') ?? 'standard')
@@ -145,7 +135,6 @@ export default function EditMenuItemPage() {
           )
         }
       }
-    }
   }, [params.id])
 
   useEffect(() => {
@@ -273,14 +262,6 @@ export default function EditMenuItemPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       if (itemType === 'simple' && recipeItems.length > 1) {
         throw new Error('Simple Items can only have one ingredient linked')
       }
@@ -299,7 +280,6 @@ export default function EditMenuItemPage() {
           image_url: formData.image_url,
         })
         .eq('id', params.id)
-        .eq('tenant_id', userData.tenant_id)
 
       if (updateError) throw updateError
 

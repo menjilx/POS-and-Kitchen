@@ -20,7 +20,7 @@ async function updateIngredient(formData: FormData) {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -54,7 +54,6 @@ async function updateIngredient(formData: FormData) {
       status,
     })
     .eq('id', ingredientId)
-    .eq('tenant_id', userData.tenant_id)
 
   if (error) {
     throw new Error(error.message)
@@ -79,7 +78,7 @@ export default async function EditIngredientPage({
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -92,12 +91,10 @@ export default async function EditIngredientPage({
       .from('ingredients')
       .select('*')
       .eq('id', id)
-      .eq('tenant_id', userData.tenant_id)
       .single(),
     supabase
       .from('ingredient_categories')
       .select('*')
-      .eq('tenant_id', userData.tenant_id)
       .order('name'),
   ])
 

@@ -10,7 +10,7 @@ export default async function ExpenseCategoriesPage() {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -21,7 +21,6 @@ export default async function ExpenseCategoriesPage() {
   const { data: categories } = await supabase
     .from('expense_categories')
     .select('*')
-    .eq('tenant_id', userData.tenant_id)
     .order('name')
 
   return (

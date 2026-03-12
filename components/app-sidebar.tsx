@@ -194,11 +194,11 @@ const navGroups: NavGroup[] = [
 
 export function AppSidebar({
   user,
-  tenantName,
+  appName,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: AppUser
-  tenantName: string
+  appName: string
 }) {
   const pathname = usePathname()
   const { settings, loading } = useTenantSettings()
@@ -211,27 +211,21 @@ export function AppSidebar({
       const { data } = await supabase
         .from('role_permissions')
         .select('role, permissions')
-        .eq('tenant_id', user.tenant_id)
 
       if (!active) return
       setPermissionsByRole(buildPermissionsByRole(data ?? []))
     }
 
-    if (user?.tenant_id) {
-      loadPermissions()
-    }
+    loadPermissions()
 
     return () => {
       active = false
     }
-  }, [user?.tenant_id])
+  }, [])
 
-  const userPermissions = user.role === 'superadmin'
-    ? Object.values(PERMISSIONS)
-    : (permissionsByRole[user.role] ?? [])
+  const userPermissions = permissionsByRole[user.role] ?? []
 
   const canAccess = (permission: Permission) => {
-    if (user.role === 'superadmin') return true
     return userPermissions.includes(permission)
   }
 
@@ -250,7 +244,7 @@ export function AppSidebar({
                   <ChefHat className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">{tenantName}</span>
+                  <span className="truncate font-semibold">{appName}</span>
                   <span className="truncate text-xs">Kitchen System</span>
                 </div>
               </Link>

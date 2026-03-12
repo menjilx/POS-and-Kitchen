@@ -31,16 +31,7 @@ export default function NewMenuCategoryPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('tenant_id')
-        .eq('id', user.id)
-        .single()
-
-      if (!userData) throw new Error('User not found')
-
       const { error } = await supabase.from('menu_categories').insert({
-        tenant_id: userData.tenant_id,
         name: formData.name,
         description: formData.description,
       })

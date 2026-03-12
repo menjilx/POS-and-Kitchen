@@ -107,7 +107,6 @@ export default function SaleDetailPage() {
   const [sale, setSale] = useState<SaleDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState('USD')
-  const [tenantId, setTenantId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [updatingPaymentStatus, setUpdatingPaymentStatus] = useState(false)
   const [updatingPaymentMethod, setUpdatingPaymentMethod] = useState(false)
@@ -138,37 +137,42 @@ export default function SaleDetailPage() {
 
       const { data: userData } = await supabase
         .from('users')
-        .select('tenant_id, role')
+        .select('role')
         .eq('id', user.id)
         .single()
 
       if (!userData) return
-      setTenantId(userData.tenant_id)
       setUserRole(userData.role)
 
-      // Fetch Tenant Settings
-      const { data: tenantData } = await supabase
-        .from('tenants')
-        .select('settings')
-        .eq('id', userData.tenant_id)
-        .single()
-      
-      const settings = tenantData?.settings as {
-        currency?: string
-        receipt?: Partial<ReceiptSettings>
-        paymentMethods?: PaymentMethodOption[]
-      } | null
-      if (settings?.currency) setCurrency(settings.currency)
-      setReceiptSettings(normalizeReceiptSettings(settings?.receipt))
-      if (Array.isArray(settings?.paymentMethods) && settings.paymentMethods.length > 0) {
-        setPaymentMethods(settings.paymentMethods)
+      // Fetch App Settings
+      const [
+        { data: currencySetting },
+        { data: receiptSetting },
+        { data: pmSetting }
+      ] = await Promise.all([
+        supabase.from('app_settings').select('value').eq('key', 'currency').single(),
+        supabase.from('app_settings').select('value').eq('key', 'receipt_settings').single(),
+        supabase.from('app_settings').select('value').eq('key', 'payment_methods').single()
+      ])
+
+      if (currencySetting?.value) setCurrency(currencySetting.value)
+      try {
+        const parsedReceipt = receiptSetting?.value ? JSON.parse(receiptSetting.value) : null
+        setReceiptSettings(normalizeReceiptSettings(parsedReceipt))
+      } catch {
+        setReceiptSettings(normalizeReceiptSettings(undefined))
       }
+      try {
+        const parsedPm = pmSetting?.value ? JSON.parse(pmSetting.value) : []
+        if (Array.isArray(parsedPm) && parsedPm.length > 0) {
+          setPaymentMethods(parsedPm)
+        }
+      } catch {}
 
       // Fetch Stations
       const { data: stationsData } = await supabase
         .from('kitchen_displays')
         .select('id, name')
-        .eq('tenant_id', userData.tenant_id)
 
       if (stationsData) {
         setStations(stationsData)
@@ -189,7 +193,6 @@ export default function SaleDetailPage() {
           kds_orders (id, status, assigned_station, started_at, completed_at)
         `)
         .eq('id', id)
-        .eq('tenant_id', userData.tenant_id)
         .single()
 
       if (error) {
@@ -202,7 +205,6 @@ export default function SaleDetailPage() {
         .from('sale_history')
         .select('id, action, details, created_at, created_by, created_by_user:users!sale_history_created_by_fkey (id, email, full_name)')
         .eq('sale_id', id)
-        .eq('tenant_id', userData.tenant_id)
         .order('created_at', { ascending: false })
 
       if (historyError) {
@@ -250,7 +252,6 @@ export default function SaleDetailPage() {
 
   const updatePaymentStatus = async (nextStatus: PaymentStatus) => {
     if (!sale) return
-    if (!tenantId) return
     if (nextStatus === sale.payment_status) return
 
     const previousStatus = sale.payment_status
@@ -261,7 +262,6 @@ export default function SaleDetailPage() {
       .from('sales')
       .update({ payment_status: nextStatus })
       .eq('id', sale.id)
-      .eq('tenant_id', tenantId)
 
     setUpdatingPaymentStatus(false)
 
@@ -276,7 +276,6 @@ export default function SaleDetailPage() {
 
   const updatePaymentMethod = async (nextValue: string) => {
     if (!sale) return
-    if (!tenantId) return
 
     const nextMethod: PaymentMethod = nextValue === '__none__' ? null : nextValue
     if (nextMethod === sale.payment_method) return
@@ -289,7 +288,6 @@ export default function SaleDetailPage() {
       .from('sales')
       .update({ payment_method: nextMethod })
       .eq('id', sale.id)
-      .eq('tenant_id', tenantId)
 
     setUpdatingPaymentMethod(false)
 
@@ -317,7 +315,6 @@ export default function SaleDetailPage() {
 
   const updateKdsStatus = async (orderId: string, nextStatus: KdsOrderStatus) => {
     if (!sale) return
-    if (!tenantId) return
 
     const currentOrder = sale.kds_orders?.find((o) => o.id === orderId)
     if (!currentOrder) return
@@ -342,7 +339,6 @@ export default function SaleDetailPage() {
       .from('kds_orders')
       .update(updateData)
       .eq('id', orderId)
-      .eq('tenant_id', tenantId)
 
     setUpdatingKdsOrderId(null)
 
@@ -364,14 +360,13 @@ export default function SaleDetailPage() {
   const canDelete = userRole === 'owner' || userRole === 'manager'
 
   const handleDeleteSale = async () => {
-    if (!sale || !tenantId) return
+    if (!sale) return
     setDeletingSale(true)
     try {
       const { data: deletedRows, error } = await supabase
         .from('sales')
         .delete()
         .eq('id', sale.id)
-        .eq('tenant_id', tenantId)
         .select('id')
 
       if (error) throw error

@@ -10,29 +10,19 @@ export default async function RegistersReportPage() {
 
   if (!user) redirect('/login')
 
-  const { data: userData } = await supabase
-    .from('users')
-    .select('tenant_id, role')
-    .eq('id', user.id)
-    .single()
-
-  if (!userData) redirect('/login')
-
   const { data: sessions } = await supabase
     .from('cashier_sessions')
     .select('*, users(full_name)')
-    .eq('tenant_id', userData.tenant_id)
     .order('opening_time', { ascending: false })
     .limit(50)
 
-  const { data: tenantData } = await supabase
-    .from('tenants')
-    .select('settings')
-    .eq('id', userData.tenant_id)
+  const { data: currencySetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'currency')
     .single()
 
-  const tenantSettings = tenantData?.settings as unknown as { currency?: string } | null
-  const currency = tenantSettings?.currency ?? 'USD'
+  const currency = currencySetting?.value ?? 'USD'
 
   return (
     <div className="space-y-6">

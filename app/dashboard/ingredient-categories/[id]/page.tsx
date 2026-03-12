@@ -15,7 +15,7 @@ async function updateCategory(formData: FormData) {
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -36,7 +36,6 @@ async function updateCategory(formData: FormData) {
       status,
     })
     .eq('id', categoryId)
-    .eq('tenant_id', userData.tenant_id)
 
   if (error) {
     throw new Error(error.message)
@@ -61,7 +60,7 @@ export default async function EditCategoryPage({
 
   const { data: userData } = await supabase
     .from('users')
-    .select('tenant_id, role')
+    .select('role')
     .eq('id', user.id)
     .single()
 
@@ -73,7 +72,6 @@ export default async function EditCategoryPage({
     .from('ingredient_categories')
     .select('*')
     .eq('id', id)
-    .eq('tenant_id', userData.tenant_id)
     .single()
 
   if (!category) {

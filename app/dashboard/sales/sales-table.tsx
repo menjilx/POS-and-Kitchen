@@ -86,7 +86,6 @@ export function SalesTable({ data, currency, canDelete, paymentMethods }: SalesT
         .from("sales")
         .delete()
         .eq("id", deleteCandidate.id)
-        .eq("tenant_id", deleteCandidate.tenant_id)
         .select("id")
 
       if (error) throw error

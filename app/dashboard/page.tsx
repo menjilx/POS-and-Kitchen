@@ -53,7 +53,6 @@ export default function DashboardPage() {
   const { settings, formatCurrency } = useTenantSettings()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tenantId, setTenantId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<UserRole | null>(null)
   const [state, setState] = useState<DashboardState>({
     todaySalesTotal: 0,
@@ -76,17 +75,15 @@ export default function DashboardPage() {
     upcomingReservations: [],
   })
 
-  const loadDisplayStatus = useCallback(async (tid: string) => {
+  const loadDisplayStatus = useCallback(async () => {
     const [displaysRes, kdsOrdersRes] = await Promise.all([
       supabase
         .from('kitchen_displays')
         .select('id, name, token, created_at')
-        .eq('tenant_id', tid)
         .order('created_at', { ascending: false }),
       supabase
         .from('kds_orders')
         .select('status, priority, assigned_station, created_at, started_at, completed_at')
-        .eq('tenant_id', tid)
         .not('status', 'eq', 'served')
         .not('status', 'eq', 'cancelled')
         .order('created_at', { ascending: true }),
@@ -262,14 +259,12 @@ export default function DashboardPage() {
 
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('tenant_id, role')
+        .select('role')
         .eq('id', user.id)
         .single()
       if (userError) throw userError
-      if (!userData?.tenant_id) return
+      if (!userData) return
 
-      const tid = userData.tenant_id
-      setTenantId(tid)
       setUserRole((userData.role as UserRole) ?? null)
       const today = new Date()
       const todayIso = isoDateUTC(today)
@@ -295,18 +290,15 @@ export default function DashboardPage() {
         supabase
           .from('sales')
           .select('sale_date,total_amount')
-          .eq('tenant_id', tid)
           .neq('payment_status', 'refunded')
           .gte('sale_date', start30Iso)
           .order('sale_date', { ascending: true }),
         supabase
           .from('stock')
-          .select('ingredient_id, quantity, ingredients (name, unit, cost_per_unit, reorder_level)')
-          .eq('tenant_id', tid),
+          .select('ingredient_id, quantity, ingredients (name, unit, cost_per_unit, reorder_level)'),
         supabase
           .from('sales')
           .select('sale_items (quantity, total_price, menu_items (name))')
-          .eq('tenant_id', tid)
           .neq('payment_status', 'refunded')
           .gte('sale_date', start30Iso)
           .order('sale_date', { ascending: false })
@@ -314,7 +306,6 @@ export default function DashboardPage() {
         supabase
           .from('sales')
           .select('sale_date,total_amount')
-          .eq('tenant_id', tid)
           .neq('payment_status', 'refunded')
           .gte('sale_date', prevMonthStartIso)
           .lte('sale_date', prevMonthEndIso),
@@ -322,7 +313,6 @@ export default function DashboardPage() {
           ? supabase
               .from('reservations')
               .select('id, customer_name, reservation_time, party_size, status, tables(table_number)')
-              .eq('tenant_id', tid)
               .gte('reservation_time', nowIso)
               .lt('reservation_time', next24Iso)
               .order('reservation_time', { ascending: true })
@@ -480,7 +470,7 @@ export default function DashboardPage() {
           }
         }) ?? []
 
-      void loadDisplayStatus(tid)
+      void loadDisplayStatus()
 
       setState((prev) => ({
         ...prev,
@@ -507,20 +497,18 @@ export default function DashboardPage() {
   }, [loadDisplayStatus])
 
   useEffect(() => {
-    if (!tenantId) return
-
     const initialTimeoutId = window.setTimeout(() => {
-      void loadDisplayStatus(tenantId)
+      void loadDisplayStatus()
     }, 0)
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState !== 'visible') return
-      void loadDisplayStatus(tenantId)
+      void loadDisplayStatus()
     }, 5000)
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        void loadDisplayStatus(tenantId)
+        void loadDisplayStatus()
       }
     }
 
@@ -531,7 +519,7 @@ export default function DashboardPage() {
       window.clearInterval(intervalId)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [loadDisplayStatus, tenantId])
+  }, [loadDisplayStatus])
 
   useEffect(() => {
     void load()

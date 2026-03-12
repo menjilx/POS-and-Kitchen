@@ -15,7 +15,6 @@ export type SaleKdsOrder = {
 
 export type Sale = {
   id: string
-  tenant_id: string
   order_number: string
   sale_type: string
   total_amount: number
