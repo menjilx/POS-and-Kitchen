@@ -2,11 +2,7 @@ drop extension if exists "pg_net";
 
 drop trigger if exists "trigger_update_menu_cost_from_recipe" on "public"."recipe_items";
 
-drop function if exists "public"."open_cashier_session"(p_tenant_id uuid, p_user_id uuid, p_opening_amount numeric, p_notes text);
-
 drop function if exists "public"."update_menu_cost_on_recipe_change"();
-
-drop index if exists "public"."idx_one_open_session_per_user";
 
 
   create table "public"."cost_profiles" (
