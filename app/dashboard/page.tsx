@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import Link from 'next/link'
 
 import { supabase } from '@/lib/supabase/client'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 import { DailySalesChart } from '@/components/dashboard/daily-sales-chart'
 import { DisplayStatusCard, type DisplayStatusRow } from '@/components/dashboard/display-status-card'
 import { Badge } from '@/components/ui/badge'
@@ -50,7 +50,7 @@ function isoDateUTC(date: Date) {
 }
 
 export default function DashboardPage() {
-  const { settings, formatCurrency } = useTenantSettings()
+  const { settings, formatCurrency } = useAppSettings()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<UserRole | null>(null)

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import type { TableStatus } from '@/types/database'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 
 type TableFormData = {
   table_number: string
@@ -18,7 +18,7 @@ const tableStatuses = ['available', 'occupied', 'reserved', 'cleaning'] as const
 
 export default function NewTablePage() {
   const router = useRouter()
-  const { settings, loading: settingsLoading } = useTenantSettings()
+  const { settings, loading: settingsLoading } = useAppSettings()
   
   const [formData, setFormData] = useState<TableFormData>({
     table_number: '',

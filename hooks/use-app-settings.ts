@@ -3,7 +3,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 
-export type TenantSettings = {
+export type NetworkPrinterConfig = {
+  id: string
+  name: string
+  ipAddress: string
+  port: number
+  paperWidth: 58 | 80
+  role: 'receipt' | 'kitchen' | 'both'
+  isDefault: boolean
+  openCashDrawer: boolean
+  enabled: boolean
+}
+
+export type PrinterSettings = {
+  method: 'browser' | 'bluetooth' | 'network'
+  autoPrintOnPayment: boolean
+  bluetooth: {
+    enabled: boolean
+    paperWidth: 58 | 80
+    autoReconnect: boolean
+    chunkSize: number
+    chunkDelay: number
+  }
+  network: {
+    printers: NetworkPrinterConfig[]
+  }
+}
+
+export type AppSettings = {
   currency: string
   timezone: string
   tax_rate: number
@@ -32,10 +59,11 @@ export type TenantSettings = {
     showReceiptAfterPayment: boolean
     showQrCode: boolean
   }
+  printer?: PrinterSettings
 }
 
-type UseTenantSettingsResult = {
-  settings: TenantSettings
+type UseAppSettingsResult = {
+  settings: AppSettings
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
@@ -43,7 +71,22 @@ type UseTenantSettingsResult = {
   formatCurrency: (value: number) => string
 }
 
-const defaultSettings: TenantSettings = {
+const defaultPrinterSettings: PrinterSettings = {
+  method: 'browser',
+  autoPrintOnPayment: false,
+  bluetooth: {
+    enabled: false,
+    paperWidth: 80,
+    autoReconnect: true,
+    chunkSize: 512,
+    chunkDelay: 50,
+  },
+  network: {
+    printers: [],
+  },
+}
+
+const defaultSettings: AppSettings = {
   currency: 'USD',
   timezone: 'UTC',
   tax_rate: 0,
@@ -73,11 +116,12 @@ const defaultSettings: TenantSettings = {
     showChange: true,
     showReceiptAfterPayment: true,
     showQrCode: true
-  }
+  },
+  printer: defaultPrinterSettings,
 }
 
-export function useTenantSettings(): UseTenantSettingsResult {
-  const [settings, setSettings] = useState<TenantSettings>(defaultSettings)
+export function useAppSettings(): UseAppSettingsResult {
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -95,7 +139,7 @@ export function useTenantSettings(): UseTenantSettingsResult {
       const { data: settingsRows, error: settingsError } = await supabase
         .from('app_settings')
         .select('key, value')
-        .in('key', ['currency', 'timezone', 'tax_rate', 'payment_methods', 'receipt_settings', 'features_menu'])
+        .in('key', ['currency', 'timezone', 'tax_rate', 'payment_methods', 'receipt_settings', 'features_menu', 'printer_settings'])
 
       if (settingsError) throw settingsError
 
@@ -108,7 +152,7 @@ export function useTenantSettings(): UseTenantSettingsResult {
         }
       }
 
-      const next: Partial<TenantSettings> = {}
+      const next: Partial<AppSettings> = {}
 
       const currency = settingsMap.get('currency')
       if (currency) next.currency = currency
@@ -148,12 +192,25 @@ export function useTenantSettings(): UseTenantSettingsResult {
         }
       }
 
+      const printerStr = settingsMap.get('printer_settings')
+      if (printerStr) {
+        try {
+          const parsed = JSON.parse(printerStr)
+          if (parsed && typeof parsed === 'object') {
+            next.printer = { ...defaultPrinterSettings, ...parsed }
+          }
+        } catch {
+          // ignore parse error
+        }
+      }
+
       setSettings({
         ...defaultSettings,
         ...next,
         features: next.features ?? defaultSettings.features,
         receipt: next.receipt ?? defaultSettings.receipt,
         paymentMethods: next.paymentMethods ?? defaultSettings.paymentMethods,
+        printer: next.printer ?? defaultSettings.printer,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Failed to load settings'

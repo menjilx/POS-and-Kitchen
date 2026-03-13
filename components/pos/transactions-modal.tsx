@@ -58,6 +58,7 @@ interface TransactionsModalProps {
   onRefund: (sale: Transaction) => Promise<void>
   onVoid: (sale: Transaction) => Promise<void>
   session: CashierSession | null
+  canVoid?: boolean
   canManageOrders?: boolean
   currency?: string
 }
@@ -68,6 +69,7 @@ export function TransactionsModal({
   onRefund,
   onVoid,
   session,
+  canVoid = false,
   canManageOrders = false,
   currency = "$"
 }: TransactionsModalProps) {
@@ -159,8 +161,12 @@ export function TransactionsModal({
   }
 
   const handleAction = async (action: 'refund' | 'void', transaction: Transaction) => {
-    if (!canManageOrders) return
-    if (!confirm(`Are you sure you want to ${action} this order? This action cannot be undone.`)) return
+    if (action === 'refund' && !canManageOrders) return
+    if (action === 'void' && !canVoid && !canManageOrders) return
+
+    if (action === 'refund') {
+      if (!confirm(`Are you sure you want to refund this order? This action cannot be undone.`)) return
+    }
 
     setProcessingId(transaction.id)
     try {
@@ -169,11 +175,9 @@ export function TransactionsModal({
       } else {
         await onVoid(transaction)
       }
-      // Refresh list
       await fetchTransactions()
     } catch (error) {
       console.error(error)
-      // Toast is handled in parent
     } finally {
       setProcessingId(null)
     }
@@ -189,7 +193,7 @@ export function TransactionsModal({
             t.orderNumber,
             t.date,
             t.time,
-            `"${t.customerName.replace(/"/g, '""')}"`, // Escape quotes
+            `"${t.customerName.replace(/"/g, '""')}"`,
             t.tableNumber || "",
             t.itemsCount,
             t.totalAmount,
@@ -264,13 +268,16 @@ export function TransactionsModal({
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         <Clock className="h-3 w-3" /> {t.time}
                       </span>
-                      <Badge 
+                      <Badge
                         variant={
-                            t.paymentStatus === 'paid' ? 'default' : 
-                            t.paymentStatus === 'refunded' ? 'destructive' : 
+                            t.paymentStatus === 'paid' ? 'default' :
+                            t.paymentStatus === 'refunded' ? 'destructive' :
+                            t.paymentStatus === 'voided' ? 'destructive' :
                             'secondary'
-                        } 
-                        className="text-[10px] h-5 px-1.5 capitalize"
+                        }
+                        className={`text-[10px] h-5 px-1.5 capitalize ${
+                          t.paymentStatus === 'voided' ? 'bg-red-100 text-red-800 border-red-200' : ''
+                        }`}
                       >
                           {t.paymentStatus}
                       </Badge>
@@ -292,11 +299,11 @@ export function TransactionsModal({
                     <span className="font-bold text-lg">
                       {formatCurrency(t.totalAmount, currency)}
                     </span>
-                    {canManageOrders && (
+                    {(canManageOrders || canVoid) && t.paymentStatus !== 'voided' && t.paymentStatus !== 'refunded' && (
                       <div className="flex gap-2">
-                          {t.paymentStatus === 'paid' && (
-                              <Button 
-                                  size="sm" 
+                          {canManageOrders && t.paymentStatus === 'paid' && (
+                              <Button
+                                  size="sm"
                                   variant="outline"
                                   className="h-7 text-xs border-red-200 hover:bg-red-50 hover:text-red-600"
                                   onClick={() => handleAction('refund', t)}
@@ -306,9 +313,9 @@ export function TransactionsModal({
                                   Return
                               </Button>
                           )}
-                          {t.paymentStatus === 'pending' && (
-                              <Button 
-                                  size="sm" 
+                          {(canVoid || canManageOrders) && ['pending', 'partial', 'paid'].includes(t.paymentStatus) && (
+                              <Button
+                                  size="sm"
                                   variant="outline"
                                   className="h-7 text-xs border-orange-200 hover:bg-orange-50 hover:text-orange-600"
                                   onClick={() => handleAction('void', t)}

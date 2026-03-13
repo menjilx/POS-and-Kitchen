@@ -72,32 +72,9 @@ END $$;
 
 
 -- ============================================
--- 1B. DROP SUPERADMIN-ONLY DB OBJECTS
--- ============================================
-
--- Drop superadmin functions
-DROP FUNCTION IF EXISTS is_superadmin();
-DROP FUNCTION IF EXISTS get_all_tenants();
-DROP FUNCTION IF EXISTS suspend_tenant(UUID, TEXT);
-DROP FUNCTION IF EXISTS reactivate_tenant(UUID);
-DROP FUNCTION IF EXISTS delete_tenant(UUID);
-DROP FUNCTION IF EXISTS get_current_tenant_id();
-
--- Drop system_settings table
-DROP TABLE IF EXISTS system_settings;
-
--- Delete superadmin users (from public.users, auth cascade handles auth.users)
-DELETE FROM public.users WHERE role = 'superadmin';
-
--- Update role CHECK constraint: remove 'superadmin', keep only owner/manager/staff
-ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-ALTER TABLE users ADD CONSTRAINT users_role_check
-  CHECK (role IN ('owner', 'manager', 'staff'));
-
-
--- ============================================
--- 1C. DROP ALL TENANT-RELATED RLS POLICIES
+-- 1B. DROP ALL TENANT-RELATED RLS POLICIES
 -- We drop ALL policies on all affected tables, then recreate simplified ones.
+-- Must happen BEFORE dropping is_superadmin() since policies depend on it.
 -- ============================================
 
 -- Helper: drop all policies on a table
@@ -127,7 +104,32 @@ END $$;
 
 
 -- ============================================
--- 1C. DROP TENANT_ID FROM ALL TABLES
+-- 1C. DROP SUPERADMIN-ONLY DB OBJECTS
+-- (Now safe — policies that referenced these functions are already dropped)
+-- ============================================
+
+-- Drop superadmin functions
+DROP FUNCTION IF EXISTS is_superadmin();
+DROP FUNCTION IF EXISTS get_all_tenants();
+DROP FUNCTION IF EXISTS suspend_tenant(UUID, TEXT);
+DROP FUNCTION IF EXISTS reactivate_tenant(UUID);
+DROP FUNCTION IF EXISTS delete_tenant(UUID);
+DROP FUNCTION IF EXISTS get_current_tenant_id();
+
+-- Drop system_settings table
+DROP TABLE IF EXISTS system_settings;
+
+-- Delete superadmin users (from public.users, auth cascade handles auth.users)
+DELETE FROM public.users WHERE role = 'superadmin';
+
+-- Update role CHECK constraint: remove 'superadmin', keep only owner/manager/staff
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check
+  CHECK (role IN ('owner', 'manager', 'staff'));
+
+
+-- ============================================
+-- 1D. DROP TENANT_ID FROM ALL TABLES
 -- Drop FK constraints, unique constraints, indexes, then columns
 -- ============================================
 
@@ -225,7 +227,7 @@ ALTER TABLE order_number_counters ENABLE ROW LEVEL SECURITY;
 
 
 -- ============================================
--- 1D. RE-ADD UNIQUE CONSTRAINTS (without tenant_id)
+-- 1E. RE-ADD UNIQUE CONSTRAINTS (without tenant_id)
 -- ============================================
 
 ALTER TABLE ingredient_categories ADD CONSTRAINT ingredient_categories_name_key UNIQUE (name);
@@ -244,7 +246,7 @@ ALTER TABLE users ADD CONSTRAINT users_email_key UNIQUE (email);
 
 
 -- ============================================
--- 1E. RECREATE SIMPLIFIED RLS POLICIES
+-- 1F. RECREATE SIMPLIFIED RLS POLICIES
 -- Pattern: SELECT = any authenticated user; write = role-based
 -- ============================================
 
@@ -562,7 +564,7 @@ CREATE POLICY "Owners and managers can manage kitchen displays"
 
 
 -- ============================================
--- 1F. UPDATE SQL FUNCTIONS
+-- 1G. UPDATE SQL FUNCTIONS
 -- ============================================
 
 -- Drop get_auth_tenant_id (no longer needed)

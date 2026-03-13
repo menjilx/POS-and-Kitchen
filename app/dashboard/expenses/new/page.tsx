@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import type { ExpenseCategory } from '@/types/database'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 
 type ExpenseFormData = {
   category_id: string
@@ -19,7 +19,7 @@ const defaultExpenseDate = new Date().toISOString().split('T')[0]
 
 export default function NewExpensePage() {
   const router = useRouter()
-  const { currencySymbol } = useTenantSettings()
+  const { currencySymbol } = useAppSettings()
   
   const [formData, setFormData] = useState<ExpenseFormData>({
     category_id: '',

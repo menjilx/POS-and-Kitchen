@@ -4,7 +4,6 @@ export interface Database {
       users: {
         Row: {
           id: string
-          tenant_id: string | null
           email: string
           full_name: string | null
           role: string
@@ -14,57 +13,42 @@ export interface Database {
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['users']['Row'], 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['users']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['users']['Row'], 'id' | 'created_at'>>
       }
       role_permissions: {
         Row: {
           id: string
-          tenant_id: string
           role: string
           permissions: string[]
           created_at: string
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['role_permissions']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['role_permissions']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['role_permissions']['Row'], 'id' | 'created_at'>>
       }
       custom_roles: {
         Row: {
           id: string
-          tenant_id: string
           name: string
           description: string
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['custom_roles']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['custom_roles']['Row'], 'id' | 'tenant_id' | 'created_at'>>
-      }
-      tenants: {
-        Row: {
-          id: string
-          name: string
-          email: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: Omit<Database['public']['Tables']['tenants']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['tenants']['Row'], 'id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['custom_roles']['Row'], 'id' | 'created_at'>>
       }
       ingredient_categories: {
         Row: {
           id: string
-          tenant_id: string
           name: string
           description: string | null
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['ingredient_categories']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['ingredient_categories']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['ingredient_categories']['Row'], 'id' | 'created_at'>>
       }
       ingredients: {
         Row: {
           id: string
-          tenant_id: string
           category_id: string | null
           name: string
           unit: string
@@ -77,35 +61,32 @@ export interface Database {
           conversion_factor: number
         }
         Insert: Omit<Database['public']['Tables']['ingredients']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['ingredients']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['ingredients']['Row'], 'id' | 'created_at'>>
       }
       locations: {
         Row: {
           id: string
-          tenant_id: string
           name: string
           address: string | null
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['locations']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['locations']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['locations']['Row'], 'id' | 'created_at'>>
       }
       stock: {
         Row: {
           id: string
-          tenant_id: string
           ingredient_id: string
           location_id: string
           quantity: number
           last_updated: string
         }
         Insert: Omit<Database['public']['Tables']['stock']['Row'], 'id' | 'last_updated'>
-        Update: Partial<Omit<Database['public']['Tables']['stock']['Row'], 'id' | 'tenant_id' | 'ingredient_id' | 'location_id'>>
+        Update: Partial<Omit<Database['public']['Tables']['stock']['Row'], 'id' | 'ingredient_id' | 'location_id'>>
       }
       stock_adjustments: {
         Row: {
           id: string
-          tenant_id: string
           ingredient_id: string
           location_id: string
           adjustment_type: 'purchase' | 'sale' | 'waste' | 'stocktake' | 'adjustment'
@@ -116,12 +97,11 @@ export interface Database {
           created_by: string | null
         }
         Insert: Omit<Database['public']['Tables']['stock_adjustments']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['stock_adjustments']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['stock_adjustments']['Row'], 'id' | 'created_at'>>
       }
       stocktakes: {
         Row: {
           id: string
-          tenant_id: string
           location_id: string
           date: string
           performed_by: string
@@ -129,7 +109,7 @@ export interface Database {
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['stocktakes']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['stocktakes']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['stocktakes']['Row'], 'id' | 'created_at'>>
       }
       stocktake_items: {
         Row: {
@@ -147,7 +127,6 @@ export interface Database {
       menu_items: {
         Row: {
           id: string
-          tenant_id: string
           name: string
           description: string | null
           category: string | null
@@ -164,7 +143,7 @@ export interface Database {
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['menu_items']['Row'], 'id' | 'total_cost' | 'contribution_margin' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['menu_items']['Row'], 'id' | 'tenant_id' | 'total_cost' | 'contribution_margin' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['menu_items']['Row'], 'id' | 'total_cost' | 'contribution_margin' | 'created_at'>>
       }
       recipe_items: {
         Row: {
@@ -180,7 +159,6 @@ export interface Database {
       suppliers: {
         Row: {
           id: string
-          tenant_id: string
           name: string
           contact_person: string | null
           email: string | null
@@ -190,12 +168,11 @@ export interface Database {
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['suppliers']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['suppliers']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['suppliers']['Row'], 'id' | 'created_at'>>
       }
       purchases: {
         Row: {
           id: string
-          tenant_id: string
           supplier_id: string | null
           invoice_number: string | null
           invoice_date: string
@@ -205,7 +182,7 @@ export interface Database {
           created_by: string
         }
         Insert: Omit<Database['public']['Tables']['purchases']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['purchases']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['purchases']['Row'], 'id' | 'created_at'>>
       }
       purchase_items: {
         Row: {
@@ -223,7 +200,6 @@ export interface Database {
       tables: {
         Row: {
           id: string
-          tenant_id: string
           table_number: string
           capacity: number
           location: string | null
@@ -231,12 +207,11 @@ export interface Database {
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['tables']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['tables']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['tables']['Row'], 'id' | 'created_at'>>
       }
       reservations: {
         Row: {
           id: string
-          tenant_id: string
           table_id: string
           customer_name: string
           customer_phone: string | null
@@ -251,35 +226,34 @@ export interface Database {
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['reservations']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['reservations']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['reservations']['Row'], 'id' | 'created_at'>>
       }
       sales: {
         Row: {
           id: string
-          tenant_id: string
           order_number: string
           sale_type: 'dine_in' | 'takeout' | 'delivery'
           table_id: string | null
           reservation_id: string | null
           total_amount: number
           payment_method: 'cash' | 'card' | 'ewallet' | 'bank_transfer' | null
-          payment_status: 'pending' | 'partial' | 'paid' | 'refunded'
+          payment_status: 'pending' | 'partial' | 'paid' | 'refunded' | 'voided'
           payment_notes: string | null
           tip_amount: number
           payment_data: unknown
           notes: string | null
+          void_reason: string | null
           sale_date: string
           sale_time: string
           created_at: string
           created_by: string
         }
         Insert: Omit<Database['public']['Tables']['sales']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['sales']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['sales']['Row'], 'id' | 'created_at'>>
       }
       sale_history: {
         Row: {
           id: string
-          tenant_id: string
           sale_id: string | null
           action: string
           details: unknown
@@ -287,7 +261,7 @@ export interface Database {
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['sale_history']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['sale_history']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['sale_history']['Row'], 'id' | 'created_at'>>
       }
       sale_items: {
         Row: {
@@ -305,7 +279,6 @@ export interface Database {
       kds_orders: {
         Row: {
           id: string
-          tenant_id: string
           sale_id: string
           order_number: string
           status: 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled'
@@ -316,7 +289,7 @@ export interface Database {
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['kds_orders']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['kds_orders']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['kds_orders']['Row'], 'id' | 'created_at'>>
       }
       kds_order_items: {
         Row: {
@@ -333,18 +306,16 @@ export interface Database {
       expense_categories: {
         Row: {
           id: string
-          tenant_id: string
           name: string
           description: string | null
           created_at: string
         }
         Insert: Omit<Database['public']['Tables']['expense_categories']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['expense_categories']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['expense_categories']['Row'], 'id' | 'created_at'>>
       }
       expenses: {
         Row: {
           id: string
-          tenant_id: string
           category_id: string
           description: string
           amount: number
@@ -354,12 +325,26 @@ export interface Database {
           created_by: string
         }
         Insert: Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'created_at'>
-        Update: Partial<Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'tenant_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['expenses']['Row'], 'id' | 'created_at'>>
+      }
+      void_requests: {
+        Row: {
+          id: string
+          sale_id: string
+          reason: string
+          status: 'pending' | 'approved' | 'denied'
+          requested_by: string
+          reviewed_by: string | null
+          review_notes: string | null
+          created_at: string
+          reviewed_at: string | null
+        }
+        Insert: Omit<Database['public']['Tables']['void_requests']['Row'], 'id' | 'created_at'>
+        Update: Partial<Omit<Database['public']['Tables']['void_requests']['Row'], 'id' | 'created_at'>>
       }
       cashier_sessions: {
         Row: {
           id: string
-          tenant_id: string
           user_id: string
           opening_amount: number
           closing_amount: number | null
@@ -372,7 +357,7 @@ export interface Database {
           updated_at: string
         }
         Insert: Omit<Database['public']['Tables']['cashier_sessions']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Database['public']['Tables']['cashier_sessions']['Row'], 'id' | 'tenant_id' | 'user_id' | 'created_at'>>
+        Update: Partial<Omit<Database['public']['Tables']['cashier_sessions']['Row'], 'id' | 'user_id' | 'created_at'>>
       }
     }
   }

@@ -3,27 +3,29 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { 
-  Settings, 
-  Monitor, 
-  Plus, 
-  Trash2, 
-  RefreshCw, 
-  Save, 
+import {
+  Settings,
+  Monitor,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Save,
   Loader2,
   TicketPercent,
   Receipt as ReceiptIcon,
   CreditCard,
   Upload,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Printer as PrinterIcon
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useToast } from '@/hooks/use-toast'
 import { PrintableReceipt, ReceiptSettings } from '@/components/receipt/printable-receipt'
 import { uploadFile } from '@/app/actions/storage'
+import { PrinterSettingsPanel } from '@/components/printer/printer-settings'
 
-interface TenantSettings {
+interface SettingsFormData {
   currency: string
   timezone: string
   tax_rate: number
@@ -59,7 +61,7 @@ export default function SettingsPage() {
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState('general')
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState<TenantSettings>({
+  const [settings, setSettings] = useState<SettingsFormData>({
     currency: 'USD',
     timezone: 'UTC',
     tax_rate: 0,
@@ -187,7 +189,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const tab = searchParams.get('tab')
-    if (tab === 'general' || tab === 'kds' || tab === 'discounts' || tab === 'receipt' || tab === 'pos') {
+    if (tab === 'general' || tab === 'kds' || tab === 'discounts' || tab === 'receipt' || tab === 'pos' || tab === 'printers') {
       setActiveTab(tab)
     }
   }, [searchParams])
@@ -592,6 +594,17 @@ export default function SettingsPage() {
             >
               <CreditCard size={20} />
               <span>POS</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('printers')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                activeTab === 'printers'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <PrinterIcon size={20} />
+              <span>Printer</span>
             </button>
           </nav>
         </div>
@@ -1118,6 +1131,10 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {activeTab === 'printers' && (
+            <PrinterSettingsPanel />
           )}
         </div>
       </div>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 import { Search, Clock, LogOut, X, List } from "lucide-react"
 import type { MenuItem, SaleType, Customer, PaymentAdditionalData } from "@/types/database"
-import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { useAppSettings } from "@/hooks/use-app-settings"
 import { useOptimizedPOSData } from "@/hooks/use-optimized-pos-data"
 import { useToast } from "@/hooks/use-toast"
 import { Input } from "@/components/ui/input"
@@ -21,6 +21,11 @@ import { HeldOrdersModal } from "@/components/pos/held-orders-modal"
 import { PaymentModal } from "@/components/pos/payment-modal"
 import { TransactionsModal, Transaction } from "@/components/pos/transactions-modal"
 import { OrderDetailsModal } from "@/components/pos/order-details-modal"
+import { VoidReasonDialog } from "@/components/pos/void-reason-dialog"
+import { VoidRequestDialog } from "@/components/void-request-dialog"
+import { VoidRequestsPanel } from "@/components/void-requests-panel"
+import { buildPermissionsByRole, PERMISSIONS, type Permission } from "@/lib/permissions"
+import { executeVoid, createVoidRequest } from "@/lib/void-utils"
 
 type CartItem = {
   item: MenuItem
@@ -171,7 +176,7 @@ function OrderSidebarSkeleton() {
 export default function POSPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { currencySymbol, formatCurrency } = useTenantSettings()
+  const { currencySymbol, formatCurrency } = useAppSettings()
   const {
     menuItems,
     tables,
@@ -206,6 +211,8 @@ export default function POSPage() {
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<ActiveOrder | null>(null)
   const [liveActiveOrders, setLiveActiveOrders] = useState<ActiveOrder[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- used in handleVoidHeldOrder/handleVoidHeldOrderConfirm and VoidReasonDialog render
+  const [voidTargetHeldOrder, setVoidTargetHeldOrder] = useState<{ id: string; orderNumber: string } | null>(null)
 
   // Cashier Session State
   const [showRegisterModal, setShowRegisterModal] = useState(false)
@@ -221,7 +228,13 @@ export default function POSPage() {
   const [currentOrderId, setCurrentOrderId] = useState("")
   const [activeSaleId, setActiveSaleId] = useState<string | null>(null)
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+  const [userPermissions, setUserPermissions] = useState<Permission[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [voidTarget, setVoidTarget] = useState<Transaction | null>(null)
   const initialLoadCompleteRef = useRef(false)
+
+  const canVoid = userPermissions.includes(PERMISSIONS.OPERATIONS_SALES_VOID)
+  const canApproveVoid = userPermissions.includes(PERMISSIONS.OPERATIONS_SALES_VOID_APPROVE)
 
   useEffect(() => {
     if (selectedCustomer) {
@@ -230,22 +243,24 @@ export default function POSPage() {
   }, [selectedCustomer])
 
   useEffect(() => {
-    const fetchRole = async () => {
+    const fetchRoleAndPermissions = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      setCurrentUserId(user.id)
 
-      const { data } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+      const [{ data: userData }, { data: rolePerms }] = await Promise.all([
+        supabase.from('users').select('role').eq('id', user.id).single(),
+        supabase.from('role_permissions').select('role, permissions'),
+      ])
 
-      if (data?.role) {
-        setCurrentUserRole(data.role)
+      if (userData?.role) {
+        setCurrentUserRole(userData.role)
+        const permsByRole = buildPermissionsByRole(rolePerms as { role: string; permissions: Permission[] }[] | null)
+        setUserPermissions(permsByRole[userData.role] ?? [])
       }
     }
 
-    void fetchRole()
+    void fetchRoleAndPermissions()
   }, [])
 
   useEffect(() => {
@@ -254,8 +269,24 @@ export default function POSPage() {
     if (!initialLoadCompleteRef.current) {
       initialLoadCompleteRef.current = true
       if (!cashierSession) {
-        setRegisterModalMode('open')
-        setShowRegisterModal(true)
+        // Double-check DB to avoid stale-state race condition
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (!user) return
+          supabase
+            .from('cashier_sessions')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('status', 'open')
+            .maybeSingle()
+            .then(({ data }) => {
+              if (!data) {
+                setRegisterModalMode('open')
+                setShowRegisterModal(true)
+              } else {
+                refreshPOSData()
+              }
+            })
+        })
       }
     }
   }, [cashierSession, isPosDataLoading])
@@ -390,10 +421,9 @@ export default function POSPage() {
           if (rpcMessage.includes('OPEN_SESSION_EXISTS') || rpcMessage.includes('already have an open register session')) {
             await refreshPOSData()
             setShowRegisterModal(false)
-            toast({ 
-              title: "Register Already Open", 
-              description: "You already have an open register session.",
-              variant: "destructive" 
+            toast({
+              title: "Register is already open",
+              description: "Your existing register session has been loaded.",
             })
             return
           }
@@ -402,12 +432,21 @@ export default function POSPage() {
         }
 
         if (rpcResult && typeof rpcResult === 'object' && 'success' in rpcResult && !rpcResult.success) {
+          if (rpcResult.error === 'OPEN_SESSION_EXISTS') {
+            await refreshPOSData()
+            setShowRegisterModal(false)
+            toast({
+              title: "Register is already open",
+              description: "Your existing register session has been loaded.",
+            })
+            return
+          }
           await refreshPOSData()
           setShowRegisterModal(false)
-          toast({ 
-            title: "Open Register Failed", 
+          toast({
+            title: "Open Register Failed",
             description: rpcResult.message || "Failed to open register session.",
-            variant: "destructive" 
+            variant: "destructive"
           })
           return
         }
@@ -491,36 +530,15 @@ export default function POSPage() {
           .select('id, total_amount, payment_method, payment_status, discount_amount, tax_amount')
           .eq('created_by', cashierSession.user_id)
           .gte('created_at', cashierSession.opening_time)
-          .in('payment_status', ['paid', 'refunded'])
+          .in('payment_status', ['paid', 'refunded', 'voided'])
 
         if (error) throw error
 
         const rows = Array.isArray(sales) ? sales : []
 
         const paidRows = rows.filter((s) => s?.payment_status === 'paid')
-        const refundedRows = rows.filter((s) => s?.payment_status === 'refunded')
-
-        const refundedSaleIds = refundedRows.map((s) => String(s.id)).filter(Boolean)
-        const voidedSaleIdSet = new Set<string>()
-
-        if (refundedSaleIds.length > 0) {
-          const { data: kdsOrders, error: kdsError } = await supabase
-            .from('kds_orders')
-            .select('sale_id, status')
-            .in('sale_id', refundedSaleIds)
-
-          if (kdsError) throw kdsError
-
-          const kdsRows = Array.isArray(kdsOrders) ? kdsOrders : []
-          kdsRows.forEach((k) => {
-            if (k?.status === 'cancelled' && k?.sale_id) {
-              voidedSaleIdSet.add(String(k.sale_id))
-            }
-          })
-        }
-
-        const voidedRows = refundedRows.filter((s) => voidedSaleIdSet.has(String(s.id)))
-        const nonVoidedRefundRows = refundedRows.filter((s) => !voidedSaleIdSet.has(String(s.id)))
+        const voidedRows = rows.filter((s) => s?.payment_status === 'voided')
+        const nonVoidedRefundRows = rows.filter((s) => s?.payment_status === 'refunded')
 
         let totalSales = 0
         let cashSales = 0
@@ -661,36 +679,28 @@ export default function POSPage() {
   }
 
   const handleVoid = async (t: Transaction) => {
-      if (currentUserRole !== 'owner' && currentUserRole !== 'manager') {
-          toast({ title: "Unauthorized", description: "Only admins can void orders", variant: "destructive" })
+      if (!canVoid && !canApproveVoid) {
+          toast({ title: "Unauthorized", description: "You don't have permission to void orders", variant: "destructive" })
           return
       }
+      setVoidTarget(t)
+  }
+
+  const handleVoidSubmit = async (reason: string) => {
+      if (!voidTarget) return
       try {
-          const { error: saleError } = await supabase
-              .from('sales')
-              .update({ payment_status: 'refunded' })
-              .eq('id', t.id)
-          
-          if (saleError) throw saleError
-
-          const { data: kdsOrder } = await supabase
-            .from('kds_orders')
-            .select('id')
-            .eq('sale_id', t.id)
-            .single()
-            
-          if (kdsOrder) {
-              await supabase
-                  .from('kds_orders')
-                  .update({ status: 'cancelled' })
-                  .eq('id', kdsOrder.id)
+          if (canApproveVoid) {
+              await executeVoid(supabase, voidTarget.id, reason)
+              toast({ title: "Order Voided", description: `Order ${voidTarget.orderNumber} has been voided.` })
+          } else {
+              if (!currentUserId) throw new Error("Not authenticated")
+              await createVoidRequest(supabase, voidTarget.id, reason, currentUserId)
+              toast({ title: "Request Submitted", description: `Void request for ${voidTarget.orderNumber} submitted for approval.` })
           }
-
-          toast({ title: "Order Voided", description: `Order ${t.orderNumber} has been voided.` })
           await refreshPOSData()
       } catch (err) {
-          console.error("Error voiding order:", err)
-          toast({ title: "Error", description: "Failed to void order", variant: "destructive" })
+          console.error("Error processing void:", err)
+          toast({ title: "Error", description: "Failed to process void", variant: "destructive" })
           throw err
       }
   }
@@ -738,6 +748,31 @@ export default function POSPage() {
     } catch (err) {
       console.error("Error deleting held order:", err)
       toast({ title: "Error", description: "Failed to delete held order", variant: "destructive" })
+    }
+  }
+
+  const handleVoidHeldOrder = (orderId: string) => {
+    if (!canVoid && !canApproveVoid) {
+      toast({ title: "Unauthorized", description: "You don't have permission to void orders", variant: "destructive" })
+      return
+    }
+    const order = heldOrders.find(o => o.id === orderId)
+    if (order) {
+      setVoidTargetHeldOrder({ id: order.id, orderNumber: order.orderNumber })
+    }
+  }
+
+  const handleVoidHeldOrderConfirm = async (reason: string) => {
+    if (!voidTargetHeldOrder) return
+    const { id, orderNumber } = voidTargetHeldOrder
+    setVoidTargetHeldOrder(null)
+    try {
+      await executeVoid(supabase, id, reason)
+      toast({ title: "Order Voided", description: `Order ${orderNumber} has been voided.` })
+      await refreshPOSData()
+    } catch (err) {
+      console.error("Error voiding held order:", err)
+      toast({ title: "Error", description: "Failed to void held order", variant: "destructive" })
     }
   }
 
@@ -810,8 +845,9 @@ export default function POSPage() {
          await refreshPOSData()
        }
     } catch (err: unknown) {
-        console.error("Error sending to kitchen:", JSON.stringify(err, null, 2))
-        toast({ title: "Error", description: "Failed to send order", variant: "destructive" })
+        const { details, message } = formatSupabaseError(err)
+        console.error("Error sending to kitchen:", details)
+        toast({ title: "Error", description: message, variant: "destructive" })
     } finally {
         setIsProcessing(false)
     }
@@ -837,8 +873,11 @@ export default function POSPage() {
        clearCart()
        await refreshPOSData()
     } catch (err: unknown) {
-        console.error("Error holding order:", JSON.stringify(err, null, 2))
-        toast({ title: "Error", description: "Failed to hold order", variant: "destructive" })
+        const { details, message } = formatSupabaseError(err)
+        console.error("Error holding order:", details)
+        toast({ title: "Error", description: message, variant: "destructive" })
+        setActiveSaleId(null)
+        setCurrentOrderId("")
     } finally {
         setIsProcessing(false)
     }
@@ -889,85 +928,36 @@ export default function POSPage() {
         throw new Error("No items to save")
       }
 
-      if (activeSaleId) {
-        const { error: saleError } = await supabase
-          .from("sales")
-          .update({
-            total_amount: cartTotal.total,
-            payment_status: paymentStatus,
-            payment_method: normalizedPaymentMethod,
-            payment_notes: paymentNotes,
-            payment_data: paymentData,
-            notes: notes,
-            customer_id: currentSelectedCustomer?.id || null,
-            discount_amount: cartTotal.discount,
-            discount_name: resolvedDiscountName,
-            tax_amount: cartTotal.tax,
-            table_id: tableId || null,
-            sale_type: orderType
-          })
-          .eq("id", activeSaleId)
+      const { data: rpcResult, error: rpcError } = await supabase.rpc('save_sale_with_items', {
+        p_sale_id: activeSaleId || null,
+        p_order_number: orderNumber,
+        p_sale_type: orderType,
+        p_table_id: tableId || null,
+        p_total_amount: cartTotal.total,
+        p_payment_status: paymentStatus,
+        p_payment_method: normalizedPaymentMethod,
+        p_payment_notes: paymentNotes,
+        p_payment_data: paymentData,
+        p_notes: notes,
+        p_customer_id: currentSelectedCustomer?.id || null,
+        p_discount_amount: cartTotal.discount,
+        p_discount_name: resolvedDiscountName,
+        p_tax_amount: cartTotal.tax,
+        p_sale_date: new Date().toISOString().split('T')[0],
+        p_sale_time: new Date().toISOString(),
+        p_created_by: user.id,
+        p_items: saleItemsData
+      })
+      if (rpcError) throw rpcError
+      if (!rpcResult || rpcResult.length === 0) throw new Error('Failed to save sale')
 
-        if (saleError) throw saleError
-
-        const { error: deleteError } = await supabase
-          .from("sale_items")
-          .delete()
-          .eq("sale_id", activeSaleId)
-
-        if (deleteError) throw deleteError
-
-        saleId = activeSaleId
-      } else {
-        const { data: saleData, error: saleError } = await supabase
-          .from("sales")
-          .insert({
-            order_number: orderNumber,
-            sale_type: orderType,
-            table_id: tableId || null,
-            total_amount: cartTotal.total,
-            payment_status: paymentStatus,
-            payment_method: normalizedPaymentMethod,
-            payment_notes: paymentNotes,
-            payment_data: paymentData,
-            notes: notes,
-            customer_id: currentSelectedCustomer?.id || null,
-            discount_amount: cartTotal.discount,
-            discount_name: resolvedDiscountName,
-            tax_amount: cartTotal.tax,
-            sale_date: new Date().toISOString().split('T')[0],
-            sale_time: new Date().toISOString(),
-            created_by: user.id
-          })
-          .select("id, order_number")
-          .single()
-
-        if (saleError) throw saleError
-        if (!saleData?.id) throw new Error("Failed to save sale")
-
-        saleId = saleData.id
-        if (!activeSaleId) setActiveSaleId(saleData.id)
-        if (saleData.order_number && saleData.order_number !== orderNumber) {
-          setCurrentOrderId(saleData.order_number)
-          orderNumber = saleData.order_number
-        }
+      const { sale_id: returnedSaleId, order_number: returnedOrderNumber } = rpcResult[0]
+      saleId = returnedSaleId
+      if (!activeSaleId) setActiveSaleId(returnedSaleId)
+      if (returnedOrderNumber && returnedOrderNumber !== orderNumber) {
+        setCurrentOrderId(returnedOrderNumber)
+        orderNumber = returnedOrderNumber
       }
-
-      if (!saleId) throw new Error('Failed to save sale')
-
-      const { error: itemsError } = await supabase
-        .from("sale_items")
-        .insert(
-          saleItemsData.map((item) => ({
-            sale_id: saleId,
-            menu_item_id: item.menu_item_id,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            total_price: item.total_price
-          }))
-        )
-
-      if (itemsError) throw itemsError
       
       const { data: kdsOrder } = await supabase
         .from("kds_orders")
@@ -980,6 +970,11 @@ export default function POSPage() {
                await supabase
                 .from("kds_orders")
                 .update({ assigned_station: destination })
+                .eq("id", kdsOrder.id)
+            } else {
+               await supabase
+                .from("kds_orders")
+                .update({ status: 'served' })
                 .eq("id", kdsOrder.id)
             }
 
@@ -1176,6 +1171,8 @@ export default function POSPage() {
           />
         )}
 
+        {canApproveVoid && <VoidRequestsPanel currency={currencySymbol} />}
+
         <div className="flex-1 overflow-y-auto pr-2 scrollbar-hide">
             {isPosDataLoading ? (
               <CategoryFilterSkeleton />
@@ -1260,13 +1257,15 @@ export default function POSPage() {
         openingTime={cashierSession?.opening_time}
       />
 
-      <HeldOrdersModal 
+      <HeldOrdersModal
         isOpen={showHeldOrders}
         onClose={() => setShowHeldOrders(false)}
         heldOrders={heldOrders}
         onResumeOrder={resumeOrder}
+        onVoidOrder={handleVoidHeldOrder}
+        canVoid={canVoid || canApproveVoid}
         onDeleteOrder={handleDeleteHeldOrder}
-        canDelete={currentUserRole === 'owner' || currentUserRole === 'manager'}
+        canDelete={currentUserRole === 'owner'}
         isLoading={isProcessing}
         currency={currencySymbol}
       />
@@ -1277,11 +1276,27 @@ export default function POSPage() {
         onRefund={handleRefund}
         onVoid={handleVoid}
         session={cashierSession}
-        canManageOrders={currentUserRole === 'owner' || currentUserRole === 'manager'}
+        canVoid={canVoid}
+        canManageOrders={canApproveVoid}
         currency={currencySymbol}
       />
 
-      <PaymentModal 
+      <VoidRequestDialog
+        isOpen={!!voidTarget}
+        onClose={() => setVoidTarget(null)}
+        onSubmit={handleVoidSubmit}
+        orderNumber={voidTarget?.orderNumber ?? ""}
+        mode={canApproveVoid ? "direct" : "request"}
+      />
+
+      <VoidReasonDialog
+        isOpen={!!voidTargetHeldOrder}
+        onClose={() => setVoidTargetHeldOrder(null)}
+        onConfirm={handleVoidHeldOrderConfirm}
+        orderNumber={voidTargetHeldOrder?.orderNumber ?? ""}
+      />
+
+      <PaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onPaymentComplete={handlePaymentComplete}

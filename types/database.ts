@@ -59,7 +59,21 @@ export type UserRole = string
 export type UserStatus = 'active' | 'deactivated'
 
 export type PaymentMethod = string
-export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded'
+export type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded' | 'voided'
+
+export type VoidRequestStatus = 'pending' | 'approved' | 'denied'
+
+export type VoidRequest = {
+  id: string
+  sale_id: string
+  reason: string
+  status: VoidRequestStatus
+  requested_by: string
+  reviewed_by: string | null
+  review_notes: string | null
+  created_at: string
+  reviewed_at: string | null
+}
 
 export type SaleType = 'dine_in' | 'takeout' | 'delivery'
 

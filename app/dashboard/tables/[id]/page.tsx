@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import type { TableStatus } from '@/types/database'
 import { Trash2 } from 'lucide-react'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 
 type TableFormData = {
   table_number: string
@@ -21,7 +21,7 @@ export default function EditTablePage() {
   const router = useRouter()
   const params = useParams()
   const id = params.id as string
-  const { settings, loading: settingsLoading } = useTenantSettings()
+  const { settings, loading: settingsLoading } = useAppSettings()
   
   const [formData, setFormData] = useState<TableFormData>({
     table_number: '',

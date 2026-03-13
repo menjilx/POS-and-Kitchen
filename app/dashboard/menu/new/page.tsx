@@ -7,7 +7,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { Trash2, Plus, Upload, X } from 'lucide-react'
 import type { Ingredient } from '@/types/database'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 import { useToast } from '@/hooks/use-toast'
 
 interface RecipeItem {
@@ -18,7 +18,7 @@ interface RecipeItem {
 
 export default function NewMenuItemPage() {
   const router = useRouter()
-  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useTenantSettings()
+  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useAppSettings()
   const { toast } = useToast()
   
   const [formData, setFormData] = useState({

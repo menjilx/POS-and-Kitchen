@@ -13,14 +13,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatCurrency } from "@/lib/utils"
-import { User, X, Receipt, Printer, Download, Paperclip } from "lucide-react"
+import { User, X, Receipt, Printer, Download, Paperclip, Bluetooth, Wifi } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { useAppSettings } from "@/hooks/use-app-settings"
 import { normalizeReceiptSettings, PrintableReceipt, type ReceiptData } from "@/components/receipt/printable-receipt"
 import { supabase } from "@/lib/supabase/client"
 import { PaymentAdditionalData } from "@/types/database"
 import { format } from "date-fns"
+import { useBluetoothPrinter } from "@/hooks/use-bluetooth-printer"
+import { printToNetwork } from "@/lib/print-client"
 
 interface PaymentModalProps {
   isOpen: boolean
@@ -61,7 +63,10 @@ export function PaymentModal({
   isLoading = false,
   kitchenDisplays = []
 }: PaymentModalProps) {
-  const { settings: tenantSettings } = useTenantSettings()
+  const { settings: tenantSettings } = useAppSettings()
+  const printerMethod = tenantSettings.printer?.method ?? 'browser'
+  const btPaperWidth = tenantSettings.printer?.bluetooth?.paperWidth ?? 80
+  const bluetoothPrinter = useBluetoothPrinter(btPaperWidth)
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [receivedAmount, setReceivedAmount] = useState<string>("")
   const [showReceipt, setShowReceipt] = useState(false)
@@ -266,10 +271,21 @@ export function PaymentModal({
       changeAmount: paymentMethod === 'cash' ? change : undefined,
     }, effectiveDestinationId)
 
-    setReceiptData({
+    const finalReceiptData = {
       ...snapshot,
       orderNumber: resolvedOrderNumber || snapshot.orderNumber,
-    })
+    }
+    setReceiptData(finalReceiptData)
+
+    // Auto-print after payment if configured
+    if (tenantSettings.printer?.autoPrintOnPayment) {
+      const rs = normalizeReceiptSettings(tenantSettings.receipt)
+      if (printerMethod === 'bluetooth' && bluetoothPrinter.state === 'connected') {
+        bluetoothPrinter.printReceipt(finalReceiptData, rs).catch(() => {})
+      } else if (printerMethod === 'network') {
+        printToNetwork(finalReceiptData, rs).catch(() => {})
+      }
+    }
 
     const showReceiptAfterPayment = tenantSettings.receipt?.showReceiptAfterPayment ?? true
 
@@ -282,8 +298,27 @@ export function PaymentModal({
 
   const receiptSettings = normalizeReceiptSettings(tenantSettings.receipt)
 
-  const handlePrintReceipt = () => {
+  const handlePrintReceipt = async () => {
     if (!receiptData) return
+    const rs = normalizeReceiptSettings(tenantSettings.receipt)
+    if (printerMethod === 'bluetooth' && bluetoothPrinter.state === 'connected') {
+      try {
+        await bluetoothPrinter.printReceipt(receiptData, rs)
+      } catch {
+        // fallback to browser print on failure
+        setPrintingReceipt(true)
+      }
+      return
+    }
+    if (printerMethod === 'network') {
+      const result = await printToNetwork(receiptData, rs)
+      if (!result.success) {
+        // fallback to browser print
+        setPrintingReceipt(true)
+      }
+      return
+    }
+    // Default: browser print
     setPrintingReceipt(true)
   }
 
@@ -362,8 +397,9 @@ export function PaymentModal({
             </p>
 
             <div className="flex gap-3 w-full mt-4">
-                <Button className="flex-1" variant="outline" onClick={handlePrintReceipt} disabled={!receiptData}>
-                    <Printer className="mr-2 h-4 w-4" /> Print
+                <Button className="flex-1" variant="outline" onClick={handlePrintReceipt} disabled={!receiptData || bluetoothPrinter.isPrinting}>
+                    {printerMethod === 'bluetooth' ? <Bluetooth className="mr-2 h-4 w-4" /> : printerMethod === 'network' ? <Wifi className="mr-2 h-4 w-4" /> : <Printer className="mr-2 h-4 w-4" />}
+                    {bluetoothPrinter.isPrinting ? 'Printing...' : 'Print'}
                 </Button>
                 <Button className="flex-1" variant="outline" onClick={handleDownloadReceipt} disabled={!receiptData}>
                     <Download className="mr-2 h-4 w-4" /> Download
@@ -502,6 +538,9 @@ export function PaymentModal({
                 </div>
 
                 <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground mb-1">
+                        Amount Due: {formatCurrency(totalAmount, currency)}
+                    </p>
                      <span className="text-4xl font-bold tracking-tight">
                         {paymentMethod === 'house_account' ? formatCurrency(totalAmount, currency) : (receivedAmount ? `${currency}${receivedAmount}` : formatCurrency(0, currency))}
                      </span>

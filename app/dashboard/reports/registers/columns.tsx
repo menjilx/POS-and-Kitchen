@@ -2,10 +2,13 @@
 
 import { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Loader2, XCircle } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 
 export type RegisterSessionWithUser = {
   id: string
+  user_id: string
   status: 'open' | 'closed'
   opening_time: string
   opening_amount: number
@@ -17,7 +20,13 @@ export type RegisterSessionWithUser = {
   } | null
 }
 
-export const getColumns = (currency: string): ColumnDef<RegisterSessionWithUser>[] => [
+type ColumnsOptions = {
+  canForceClose?: boolean
+  onForceClose?: (session: RegisterSessionWithUser) => void
+  forceClosingId?: string | null
+}
+
+export const getColumns = (currency: string, options?: ColumnsOptions): ColumnDef<RegisterSessionWithUser>[] => [
   {
     accessorKey: "users.full_name",
     header: "Cashier",
@@ -75,4 +84,24 @@ export const getColumns = (currency: string): ColumnDef<RegisterSessionWithUser>
       return <div className="text-sm text-muted-foreground truncate max-w-50">{row.getValue("notes") || '-'}</div>
     },
   },
+  ...(options?.canForceClose ? [{
+    id: "actions",
+    header: "Actions",
+    cell: ({ row }: { row: { original: RegisterSessionWithUser } }) => {
+      if (row.original.status !== 'open') return null
+      const isClosing = options.forceClosingId === row.original.id
+      return (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => options.onForceClose?.(row.original)}
+          disabled={isClosing}
+          className="text-destructive hover:text-destructive"
+        >
+          {isClosing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <XCircle className="h-4 w-4 mr-1" />}
+          Force Close
+        </Button>
+      )
+    },
+  } as ColumnDef<RegisterSessionWithUser>] : []),
 ]

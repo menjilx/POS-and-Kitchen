@@ -35,7 +35,10 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
   }, [item.image_url])
 
   return (
-    <Card className={`overflow-hidden transition-all hover:shadow-md ${quantity > 0 ? "ring-2 ring-primary" : ""}`}>
+    <Card
+      className={`overflow-hidden transition-all hover:shadow-md cursor-pointer active:scale-[0.98] ${quantity > 0 ? "ring-2 ring-primary" : ""}`}
+      onClick={onAdd}
+    >
       <div className="aspect-4/3 bg-muted relative flex items-center justify-center">
         {imageSrc ? (
           <NextImage 
@@ -56,16 +59,16 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
         
         {quantity > 0 ? (
           <div className="flex items-center justify-between bg-secondary/50 rounded-lg p-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={onRemove}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={(e) => { e.stopPropagation(); onRemove() }}>
               <Minus className="h-4 w-4" />
             </Button>
             <span className="font-medium text-sm">{quantity}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={onAdd}>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={(e) => { e.stopPropagation(); onAdd() }}>
               <Plus className="h-4 w-4" />
             </Button>
           </div>
         ) : (
-          <Button className="w-full" variant="outline" onClick={onAdd}>
+          <Button className="w-full" variant="outline" onClick={(e) => e.stopPropagation()}>
             <Plus className="h-4 w-4 mr-2" />
             Add
           </Button>

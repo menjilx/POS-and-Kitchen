@@ -6,13 +6,13 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 
 export default function EditMenuCategoryPage() {
   const router = useRouter()
   const params = useParams()
   const id = params?.id as string
-  const { settings, loading: settingsLoading } = useTenantSettings()
+  const { settings, loading: settingsLoading } = useAppSettings()
   
   const [formData, setFormData] = useState({
     name: '',

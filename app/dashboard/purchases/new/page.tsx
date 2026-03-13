@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { Plus, Trash2, Paperclip, X } from 'lucide-react'
 import type { Ingredient, Location, Supplier } from '@/types/database'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 import { uploadFile } from '@/app/actions/storage'
 
 type PurchaseItemDraft = {
@@ -30,7 +30,7 @@ const defaultInvoiceDate = new Date().toISOString().split('T')[0]
 
 export default function NewPurchasePage() {
   const router = useRouter()
-  const { currencySymbol, formatCurrency } = useTenantSettings()
+  const { currencySymbol, formatCurrency } = useAppSettings()
   
   const [formData, setFormData] = useState<PurchaseFormData>({
     supplier_id: '',

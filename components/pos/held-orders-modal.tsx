@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { formatCurrency } from "@/lib/utils"
-import { Clock, User, Search } from "lucide-react"
+import { Clock, User, Search, Ban } from "lucide-react"
 
 export interface HeldOrder {
   id: string
@@ -31,6 +31,8 @@ interface HeldOrdersModalProps {
   onClose: () => void
   heldOrders: HeldOrder[]
   onResumeOrder: (orderId: string) => void
+  onVoidOrder?: (orderId: string) => void
+  canVoid?: boolean
   onDeleteOrder?: (orderId: string) => void
   canDelete?: boolean
   isLoading?: boolean
@@ -42,6 +44,8 @@ export function HeldOrdersModal({
   onClose,
   heldOrders,
   onResumeOrder,
+  onVoidOrder,
+  canVoid = false,
   onDeleteOrder,
   canDelete = false,
   isLoading = false,
@@ -120,6 +124,21 @@ export function HeldOrdersModal({
                       {formatCurrency(order.totalAmount, currency)}
                     </span>
                     <div className="flex items-center gap-2">
+                      {canVoid && onVoidOrder && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+                          disabled={isLoading}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onVoidOrder(order.id)
+                          }}
+                        >
+                          <Ban className="h-3 w-3 mr-1" />
+                          Void
+                        </Button>
+                      )}
                       {canDelete && onDeleteOrder && (
                         <Button
                           size="sm"

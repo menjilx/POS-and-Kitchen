@@ -70,13 +70,20 @@ export function buildReceiptText(settings: ReceiptSettings, data: ReceiptData) {
   const lines: string[] = []
 
   const formatMoney = (price: number) => {
+    const code = data.currency || 'USD'
     try {
-      return new Intl.NumberFormat('en-US', {
+      const parts = new Intl.NumberFormat('en-US', {
         style: 'currency',
-        currency: data.currency || 'USD',
-      }).format(price)
+        currency: code,
+      }).formatToParts(price)
+      return parts.map(p => {
+        if (p.type === 'currency' && /[^\x20-\x7E]/.test(p.value)) {
+          return code
+        }
+        return p.value
+      }).join('')
     } catch {
-      return `${data.currency || '$'}${price.toFixed(2)}`
+      return `${code} ${price.toFixed(2)}`
     }
   }
 
@@ -177,7 +184,7 @@ export const PrintableReceipt = React.forwardRef<HTMLDivElement, PrintableReceip
           )}
           <h1 className="text-xl font-bold uppercase mb-1">{settings.headerText}</h1>
           <p className="whitespace-pre-line mb-1">{settings.address}</p>
-          <p>Tel. {settings.phoneNumber}</p>
+          {settings.phoneNumber && <p>Tel. {settings.phoneNumber}</p>}
         </div>
 
         <div className="text-center mb-2">

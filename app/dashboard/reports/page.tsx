@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { Calendar } from 'lucide-react'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 import { DataTable } from '@/components/data-table'
 import { ColumnDef } from '@tanstack/react-table'
 
@@ -53,7 +53,7 @@ const defaultDateRange: DateRange = (() => {
 })()
 
 export default function ReportsPage() {
-  const { formatCurrency } = useTenantSettings()
+  const { formatCurrency } = useAppSettings()
   const [activeTab, setActiveTab] = useState<'pnl' | 'menu' | 'ingredients'>('pnl')
   const [loading, setLoading] = useState(true)
   const [pnlData, setPnlData] = useState<ProfitLossRow | null>(null)

@@ -6,12 +6,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { Upload, X, Package } from 'lucide-react'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 import { useToast } from '@/hooks/use-toast'
 
 export default function NewSimpleMenuItemPage() {
   const router = useRouter()
-  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useTenantSettings()
+  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useAppSettings()
   const { toast } = useToast()
   
   const [formData, setFormData] = useState({

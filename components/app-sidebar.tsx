@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/sidebar"
 
 import { NavUser } from "@/components/nav-user"
-import { useTenantSettings } from "@/hooks/use-tenant-settings"
+import { useAppSettings } from "@/hooks/use-app-settings"
 import { supabase } from "@/lib/supabase/client"
 import { buildPermissionsByRole, PERMISSIONS, Permission } from "@/lib/permissions"
 
@@ -201,7 +201,7 @@ export function AppSidebar({
   appName: string
 }) {
   const pathname = usePathname()
-  const { settings, loading } = useTenantSettings()
+  const { settings, loading } = useAppSettings()
   const menuEnabled = loading ? true : (settings.features?.menu ?? true)
   const [permissionsByRole, setPermissionsByRole] = React.useState(() => buildPermissionsByRole())
 

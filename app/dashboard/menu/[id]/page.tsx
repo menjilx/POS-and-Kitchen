@@ -7,7 +7,7 @@ import Image from "next/image"
 import { supabase } from '@/lib/supabase/client'
 import { Trash2, Plus, Upload, X } from 'lucide-react'
 import type { Ingredient } from '@/types/database'
-import { useTenantSettings } from '@/hooks/use-tenant-settings'
+import { useAppSettings } from '@/hooks/use-app-settings'
 import { useToast } from '@/hooks/use-toast'
 
 interface RecipeItem {
@@ -42,7 +42,7 @@ const menuItemStatuses = ['active', 'deactivated'] as const
 export default function EditMenuItemPage() {
   const router = useRouter()
   const params = useParams()
-  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useTenantSettings()
+  const { settings, loading: settingsLoading, currencySymbol, formatCurrency } = useAppSettings()
   const { toast } = useToast()
   
   const [formData, setFormData] = useState<MenuItemFormData>({
@@ -335,11 +335,19 @@ export default function EditMenuItemPage() {
         if (insertError) throw insertError
       }
 
-      router.push('/dashboard/menu')
+      toast({
+        title: "Menu item updated",
+        description: `"${formData.name}" has been updated successfully.`,
+      })
     } catch (err) {
       console.error('Error updating menu item:', err)
       const msg = err instanceof Error ? err.message : (err as { message?: string })?.message || 'Failed to update menu item'
       setError(msg)
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: msg,
+      })
     } finally {
       setLoading(false)
     }

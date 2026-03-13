@@ -236,8 +236,8 @@ INSERT INTO "public"."cashier_sessions" ("id", "user_id", "opening_amount", "clo
 Closing Note: demo closing register', '2026-01-11 13:03:17.680205+00', '2026-01-11 13:03:17.680205+00'),
 	('aea5ee43-e4e4-4b8f-aecb-27644f305b76', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, 528.00, NULL, '2026-01-12 04:37:21.567+00', '2026-01-12 09:03:03.573+00', 'closed', 'Closing Note: new feature for closing register', '2026-01-12 04:37:21.676193+00', '2026-01-12 04:37:21.676193+00'),
 	('68f596b7-30a2-4af5-896a-9ff70a106ccf', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, 10700.00, NULL, '2026-01-13 04:54:44.941+00', '2026-01-18 01:23:00.377+00', 'closed', '', '2026-01-13 04:54:45.0633+00', '2026-01-13 04:54:45.0633+00'),
-	('2488d951-1cda-41cd-8945-b001e8988110', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, NULL, NULL, '2026-01-18 01:23:17.291+00', NULL, 'open', '', '2026-01-18 01:23:17.456336+00', '2026-01-18 01:23:17.456336+00'),
-	('43a73c62-dd29-475c-806c-b89664d9d8bd', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, NULL, NULL, '2026-01-18 08:45:00.294+00', NULL, 'open', '', '2026-01-18 08:45:00.472864+00', '2026-01-18 08:45:00.472864+00'),
+	('2488d951-1cda-41cd-8945-b001e8988110', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, NULL, NULL, '2026-01-18 01:23:17.291+00', '2026-01-18 08:44:00.000+00', 'closed', '', '2026-01-18 01:23:17.456336+00', '2026-01-18 01:23:17.456336+00'),
+	('43a73c62-dd29-475c-806c-b89664d9d8bd', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, NULL, NULL, '2026-01-18 08:45:00.294+00', '2026-01-18 08:54:00.000+00', 'closed', '', '2026-01-18 08:45:00.472864+00', '2026-01-18 08:45:00.472864+00'),
 	('07ead3a6-04ba-4a56-ad4c-7895a88b5737', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', 0.00, NULL, NULL, '2026-01-18 08:55:44.476+00', NULL, 'open', '', '2026-01-18 08:55:44.568748+00', '2026-01-18 08:55:44.568748+00');
 
 
@@ -741,9 +741,6 @@ INSERT INTO "public"."stock" ("id", "ingredient_id", "location_id", "quantity", 
 -- Data for Name: stocktakes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO "public"."stocktakes" ("id", "tenant_id", "location_id", "date", "performed_by", "notes", "created_at") VALUES
-	('00f3bdd4-8422-47fb-8c75-3167bfcc8ac1', 'ed331552-b955-470d-b2fd-0a94c3f98507', '2026-01-11 16:53:34.574+00', 'a9a9d589-b37f-4d7c-a62d-f297dacd8476', '', '2026-01-11 16:53:34.740555+00');
-
 
 --
 -- Data for Name: stocktake_items; Type: TABLE DATA; Schema: public; Owner: postgres
@@ -753,12 +750,8 @@ INSERT INTO "public"."stocktakes" ("id", "tenant_id", "location_id", "date", "pe
 
 --
 -- Data for Name: system_settings; Type: TABLE DATA; Schema: public; Owner: postgres
+-- (table dropped in single-tenant refactor)
 --
-
-TRUNCATE TABLE public.system_settings;
-
-INSERT INTO "public"."system_settings" ("key", "value", "description", "created_at", "updated_at") VALUES
-	('KITCHEN-SUPERADMIN-2024', 'kitchen_super_admin_2024', 'Secret code for superadmin signup', '2026-01-10 16:00:29.465554+00', '2026-01-10 16:09:23.958839+00');
 
 
 --

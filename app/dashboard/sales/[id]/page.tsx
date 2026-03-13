@@ -25,9 +25,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { normalizeReceiptSettings, PrintableReceipt, type ReceiptSettings } from '@/components/receipt/printable-receipt'
+import { useAppSettings } from '@/hooks/use-app-settings'
+import { normalizeReceiptSettings, PrintableReceipt, type ReceiptSettings, type ReceiptData } from '@/components/receipt/printable-receipt'
+import { useBluetoothPrinter } from '@/hooks/use-bluetooth-printer'
+import { printToNetwork } from '@/lib/print-client'
+import { buildPermissionsByRole, PERMISSIONS, type Permission } from '@/lib/permissions'
+import { VoidRequestDialog } from '@/components/void-request-dialog'
+import { executeVoid, createVoidRequest } from '@/lib/void-utils'
 
-type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded'
+type PaymentStatus = 'pending' | 'partial' | 'paid' | 'refunded' | 'voided'
 type KdsOrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'cancelled'
 type PaymentMethod = string | null
 
@@ -104,6 +110,10 @@ export default function SaleDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { settings: tenantSettings } = useAppSettings()
+  const printerMethod = tenantSettings.printer?.method ?? 'browser'
+  const btPaperWidth = tenantSettings.printer?.bluetooth?.paperWidth ?? 80
+  const bluetoothPrinter = useBluetoothPrinter(btPaperWidth)
   const [sale, setSale] = useState<SaleDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [currency, setCurrency] = useState('USD')
@@ -118,6 +128,9 @@ export default function SaleDetailPage() {
   const [historyLoading, setHistoryLoading] = useState(true)
   const [deletingSale, setDeletingSale] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [userPermissions, setUserPermissions] = useState<Permission[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [showVoidDialog, setShowVoidDialog] = useState(false)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([
     { id: 'cash', label: 'Cash' },
     { id: 'card', label: 'Credit/Debit Card' },
@@ -134,15 +147,18 @@ export default function SaleDetailPage() {
         router.push('/login')
         return
       }
+      setCurrentUserId(user.id)
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single()
+      const [{ data: userData }, { data: rolePerms }] = await Promise.all([
+        supabase.from('users').select('role').eq('id', user.id).single(),
+        supabase.from('role_permissions').select('role, permissions'),
+      ])
 
       if (!userData) return
       setUserRole(userData.role)
+
+      const permsByRole = buildPermissionsByRole(rolePerms as { role: string; permissions: Permission[] }[] | null)
+      setUserPermissions(permsByRole[userData.role] ?? [])
 
       // Fetch App Settings
       const [
@@ -358,6 +374,29 @@ export default function SaleDetailPage() {
   }
 
   const canDelete = userRole === 'owner' || userRole === 'manager'
+  const canVoid = userPermissions.includes(PERMISSIONS.OPERATIONS_SALES_VOID)
+  const canApproveVoid = userPermissions.includes(PERMISSIONS.OPERATIONS_SALES_VOID_APPROVE)
+  const isVoidable = sale ? ['pending', 'partial', 'paid'].includes(sale.payment_status) : false
+
+  const handleVoidSubmit = async (reason: string) => {
+    if (!sale) return
+    try {
+      if (canApproveVoid) {
+        await executeVoid(supabase, sale.id)
+        setSale({ ...sale, payment_status: 'voided' })
+        toast({ title: 'Order Voided', description: `Order ${sale.order_number} has been voided.` })
+      } else {
+        if (!currentUserId) throw new Error('Not authenticated')
+        await createVoidRequest(supabase, sale.id, reason, currentUserId)
+        toast({ title: 'Request Submitted', description: `Void request for ${sale.order_number} submitted for approval.` })
+      }
+      setShowVoidDialog(false)
+    } catch (err) {
+      console.error('Error processing void:', err)
+      toast({ title: 'Error', description: 'Failed to process void', variant: 'destructive' })
+      throw err
+    }
+  }
 
   const handleDeleteSale = async () => {
     if (!sale) return
@@ -417,6 +456,7 @@ export default function SaleDetailPage() {
     if (action === 'updated') return 'Order updated'
     if (action === 'deleted') return 'Order deleted'
     if (action === 'refunded') return 'Order refunded'
+    if (action === 'voided') return 'Order voided'
     return action.replace(/_/g, ' ')
   }
 
@@ -446,6 +486,9 @@ export default function SaleDetailPage() {
     }
     if (entry.action === 'refunded') {
       return 'Payment status set to refunded'
+    }
+    if (entry.action === 'voided') {
+      return 'Payment status set to voided'
     }
     if (!oldRow || !newRow) return null
 
@@ -524,17 +567,68 @@ export default function SaleDetailPage() {
             Back to Sales
           </Button>
           <h1 className="text-3xl font-bold">Order {sale.order_number}</h1>
-          <Badge variant={sale.payment_status === 'paid' ? 'default' : 'secondary'} className="ml-2 capitalize">
+          <Badge
+            variant={sale.payment_status === 'paid' ? 'default' : sale.payment_status === 'voided' ? 'destructive' : 'secondary'}
+            className={`ml-2 capitalize ${
+              sale.payment_status === 'voided' ? 'bg-red-100 text-red-800 border-red-200' :
+              sale.payment_status === 'refunded' ? 'bg-orange-100 text-orange-800 border-orange-200' : ''
+            }`}
+          >
             {sale.payment_status}
           </Badge>
           <div className="ml-auto flex items-center gap-2">
+            {(canVoid || canApproveVoid) && isVoidable ? (
+              <Button
+                variant="outline"
+                className="border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+                onClick={() => setShowVoidDialog(true)}
+              >
+                Void
+              </Button>
+            ) : null}
             {canDelete ? (
               <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)} disabled={deletingSale}>
                 Delete
               </Button>
             ) : null}
-            <Button variant="outline" onClick={() => setPrintingReceipt(true)} disabled={!receiptSettings}>
-            Print Receipt
+            <Button variant="outline" onClick={async () => {
+              if (!receiptSettings || !sale) return
+              const receiptData: ReceiptData = {
+                items: (sale.sale_items ?? []).map((item) => ({
+                  name: item.menu_items?.name || 'Unknown Item',
+                  quantity: item.quantity,
+                  price: item.unit_price,
+                })),
+                subtotal,
+                tax: sale.tax_amount,
+                discount: sale.discount_amount,
+                discountName: sale.discount_name,
+                total: sale.total_amount,
+                cashierName: cashierLabel === '-' ? undefined : cashierLabel,
+                customerName: sale.customers?.name || 'Walk-in Customer',
+                orderNumber: sale.order_number,
+                date: new Date(sale.sale_time).toLocaleString(),
+                paymentMethod: sale.payment_method ?? undefined,
+                paymentStatus: sale.payment_status,
+                paymentRef: parsedPaymentData?.ref,
+                paymentNotes: sale.payment_notes ?? parsedPaymentData?.notes,
+                receivedAmount: parsedPaymentData?.receivedAmount,
+                changeAmount: parsedPaymentData?.changeAmount,
+                currency,
+              }
+              if (printerMethod === 'bluetooth' && bluetoothPrinter.state === 'connected') {
+                try {
+                  await bluetoothPrinter.printReceipt(receiptData, receiptSettings)
+                  return
+                } catch { /* fallback to browser */ }
+              }
+              if (printerMethod === 'network') {
+                const result = await printToNetwork(receiptData, receiptSettings)
+                if (result.success) return
+              }
+              setPrintingReceipt(true)
+            }} disabled={!receiptSettings || bluetoothPrinter.isPrinting}>
+            {bluetoothPrinter.isPrinting ? 'Printing...' : 'Print Receipt'}
             </Button>
           </div>
         </div>
@@ -765,6 +859,7 @@ export default function SaleDetailPage() {
                               <SelectItem value="partial">partial</SelectItem>
                               <SelectItem value="paid">paid</SelectItem>
                               <SelectItem value="refunded">refunded</SelectItem>
+                              <SelectItem value="voided">voided</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -849,6 +944,14 @@ export default function SaleDetailPage() {
         </div>
       </div>
       </div>
+
+      <VoidRequestDialog
+        isOpen={showVoidDialog}
+        onClose={() => setShowVoidDialog(false)}
+        onSubmit={handleVoidSubmit}
+        orderNumber={sale.order_number}
+        mode={canApproveVoid ? 'direct' : 'request'}
+      />
     </div>
   )
 }
