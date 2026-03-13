@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { formatCurrency } from "@/lib/utils"
-import { Clock, User, Search, Ban } from "lucide-react"
+import { Clock, User, Search, Ban, StickyNote } from "lucide-react"
 
 export interface HeldOrder {
   id: string
@@ -24,6 +24,7 @@ export interface HeldOrder {
   time: string
   itemsCount: number
   status?: string
+  note?: string
 }
 
 interface HeldOrdersModalProps {
@@ -64,7 +65,8 @@ export function HeldOrdersModal({
     const query = searchQuery.toLowerCase()
     return (
       order.orderNumber.toLowerCase().includes(query) ||
-      order.customerName.toLowerCase().includes(query)
+      order.customerName.toLowerCase().includes(query) ||
+      (order.note && order.note.toLowerCase().includes(query))
     )
   })
 
@@ -118,6 +120,12 @@ export function HeldOrdersModal({
                     <p className="text-xs text-muted-foreground">
                       {order.itemsCount} items • {order.date}
                     </p>
+                    {order.note && (
+                      <p className="text-xs text-blue-600 flex items-center gap-1 mt-0.5">
+                        <StickyNote className="h-3 w-3" />
+                        {order.note}
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="font-bold text-lg">

@@ -40,6 +40,7 @@ type HeldOrder = {
   time: string
   itemsCount: number
   status?: string
+  note?: string
 }
 
 async function getUser() {
@@ -211,10 +212,17 @@ async function fetchHeldOrders(): Promise<HeldOrder[]> {
 
   return heldSales.map(s => {
     let name = "Guest"
+    let note: string | undefined
     if (s.notes?.startsWith("Customer: ")) {
       name = s.notes.replace("Customer: ", "")
       if (name.includes(" | Note: ")) {
-        name = name.split(" | Note: ")[0]
+        const parts = name.split(" | Note: ")
+        name = parts[0]
+        note = parts[1]
+        // Strip any trailing metadata (e.g. " | Ref: ..." or " | PayNote: ...")
+        if (note?.includes(" | ")) {
+          note = note.split(" | ")[0]
+        }
       }
     }
     return {
@@ -226,6 +234,7 @@ async function fetchHeldOrders(): Promise<HeldOrder[]> {
       time: `Wait: ${formatDistanceToNow(new Date(s.sale_time))}`,
       itemsCount: itemsCountMap.get(s.id) ?? 0,
       status: statusMap.get(s.id),
+      note,
     }
   })
 }

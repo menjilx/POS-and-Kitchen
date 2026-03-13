@@ -19,6 +19,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog,
   DialogContent,
@@ -55,7 +56,7 @@ interface OrderSidebarProps {
   cartItems: CartItem[]
   onRemoveItem: (itemId: string) => void
   onUpdateQuantity: (itemId: string, delta: number) => void
-  onHoldOrder: () => void
+  onHoldOrder: (holdNote?: string) => void
   onPay: () => void
   onClearCart: () => void
   subtotal: number
@@ -109,6 +110,8 @@ export function OrderSidebar({
 
   const [sendDialogOpen, setSendDialogOpen] = useState(false)
   const [pendingDestination, setPendingDestination] = useState<{id: string, name: string} | null>(null)
+  const [holdDialogOpen, setHoldDialogOpen] = useState(false)
+  const [holdNote, setHoldNote] = useState("")
 
   const resolvedDisplays = useMemo(() => {
     return kitchenDisplays
@@ -353,7 +356,7 @@ export function OrderSidebar({
                </DropdownMenuContent>
              </DropdownMenu>
 
-             <Button variant="outline" onClick={onHoldOrder} disabled={cartItems.length === 0 || isProcessing}>
+             <Button variant="outline" onClick={() => { setHoldNote(""); setHoldDialogOpen(true) }} disabled={cartItems.length === 0 || isProcessing}>
                 Hold Order
              </Button>
             <Button className="w-full bg-primary hover:bg-primary/90 col-span-2" onClick={onPay} disabled={cartItems.length === 0 || isProcessing}>
@@ -400,6 +403,52 @@ export function OrderSidebar({
               disabled={!pendingDestination || isProcessing || cartItems.length === 0}
             >
               Send & Hold
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={holdDialogOpen} onOpenChange={(open) => {
+        setHoldDialogOpen(open)
+        if (!open) setHoldNote("")
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hold Order</DialogTitle>
+            <DialogDescription>
+              Add a note to help identify this order later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              placeholder="e.g. Table by the window, John's birthday order..."
+              value={holdNote}
+              onChange={(e) => setHoldNote(e.target.value)}
+              rows={3}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  onHoldOrder(holdNote.trim() || undefined)
+                  setHoldDialogOpen(false)
+                  setHoldNote("")
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setHoldDialogOpen(false)
+              setHoldNote("")
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              onHoldOrder(holdNote.trim() || undefined)
+              setHoldDialogOpen(false)
+              setHoldNote("")
+            }}>
+              Hold Order
             </Button>
           </DialogFooter>
         </DialogContent>

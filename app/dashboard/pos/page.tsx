@@ -853,9 +853,9 @@ export default function POSPage() {
     }
   }
 
-  const handleOrderSubmit = async (status: 'hold' | 'pay') => {
+  const handleOrderSubmit = async (status: 'hold' | 'pay', holdNote?: string) => {
     if (cartItems.length === 0) return
-    
+
     if (status === 'pay') {
         setShowPaymentModal(true)
         return
@@ -863,13 +863,13 @@ export default function POSPage() {
 
     setIsProcessing(true)
     try {
-       await saveOrder('pending')
-       
+       await saveOrder('pending', null, undefined, undefined, holdNote)
+
        toast({
         title: "Order Held",
-        description: `Order has been held.`,
+        description: holdNote ? `Order held: ${holdNote}` : `Order has been held.`,
        })
-       
+
        clearCart()
        await refreshPOSData()
     } catch (err: unknown) {
@@ -883,7 +883,7 @@ export default function POSPage() {
     }
   }
 
-  const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData) => {
+  const saveOrder = async (paymentStatus: 'pending' | 'paid', paymentMethod: string | null = null, destination?: string, additionalData?: PaymentAdditionalData, holdNote?: string) => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("No user")
 
@@ -899,7 +899,8 @@ export default function POSPage() {
 
       let saleId = activeSaleId
       
-      let notes = `Customer: ${currentSelectedCustomer?.name || 'Walk-in Customer'}${orderNote ? ` | Note: ${orderNote}` : ''}`
+      const effectiveNote = holdNote || orderNote
+      let notes = `Customer: ${currentSelectedCustomer?.name || 'Walk-in Customer'}${effectiveNote ? ` | Note: ${effectiveNote}` : ''}`
       if (additionalData) {
           if (additionalData.ref) notes += ` | Ref: ${additionalData.ref}`
           if (additionalData.notes) notes += ` | PayNote: ${additionalData.notes}`
@@ -1223,7 +1224,7 @@ export default function POSPage() {
             cartItems={cartItems}
             onRemoveItem={removeFromCart}
             onUpdateQuantity={updateQuantity}
-            onHoldOrder={() => handleOrderSubmit('hold')}
+            onHoldOrder={(holdNote) => handleOrderSubmit('hold', holdNote)}
             onPay={() => handleOrderSubmit('pay')}
             onClearCart={clearCart}
             subtotal={cartTotal.subtotal}
