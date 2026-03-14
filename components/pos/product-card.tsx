@@ -39,7 +39,7 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
       className={`overflow-hidden transition-all hover:shadow-md cursor-pointer active:scale-[0.98] ${quantity > 0 ? "ring-2 ring-primary" : ""}`}
       onClick={onAdd}
     >
-      <div className="aspect-[4/2.5] bg-muted relative flex items-center justify-center">
+      <div className="aspect-[4/3] bg-muted relative flex items-center justify-center">
         {imageSrc ? (
           <NextImage
             src={imageSrc}
@@ -50,12 +50,14 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
             priority={priority}
           />
         ) : (
-          <ImageIcon className="h-8 w-8 text-muted-foreground opacity-50" />
+          <ImageIcon className="h-7 w-7 text-muted-foreground/40" />
         )}
       </div>
-      <CardContent className="p-2.5">
-        <h3 className="font-semibold text-xs line-clamp-1 mb-0.5">{item.name}</h3>
-        <p className="text-sm font-bold mb-2">{formatCurrency(item.selling_price, currency)}</p>
+      <CardContent className="p-3 space-y-2">
+        <div>
+          <h3 className="font-semibold text-xs leading-tight line-clamp-1">{item.name}</h3>
+          <p className="text-sm font-bold mt-0.5">{formatCurrency(item.selling_price, currency)}</p>
+        </div>
 
         {quantity > 0 ? (
           <div className="flex items-center justify-between bg-secondary/50 rounded-lg p-0.5">
