@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
+import { uploadFile } from '@/app/actions/storage'
 import { Trash2, Plus, Upload, X } from 'lucide-react'
 import type { Ingredient } from '@/types/database'
 import { useAppSettings } from '@/hooks/use-app-settings'
@@ -138,33 +139,18 @@ export default function NewMenuItemPage() {
 
     try {
       setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Not authenticated')
+      const formDataUpload = new FormData()
+      formDataUpload.append('file', file)
+      const result = await uploadFile(formDataUpload)
 
-      const nameExt = file.name.includes('.') ? file.name.split('.').pop() : undefined
-      const typeExt = file.type.includes('/') ? file.type.split('/').pop() : undefined
-      const fileExt = (nameExt || typeExt || 'png').toLowerCase()
-      const uuid = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-      const filePath = `${user.id}/${uuid}.${fileExt}`
+      if (!result.success) throw new Error(result.error || 'Upload failed')
 
-      const { error: uploadError } = await supabase.storage
-        .from('menu-images')
-        .upload(filePath, file, { upsert: true, contentType: file.type || undefined })
-
-      if (uploadError) throw uploadError
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('menu-images')
-        .getPublicUrl(filePath)
-
-      setFormData(prev => ({ ...prev, image_url: publicUrl }))
+      setFormData(prev => ({ ...prev, image_url: result.url! }))
     } catch (error) {
       console.error('Error uploading image:', error)
       toast({
         title: "Error uploading image",
-        description: "Please try again",
+        description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive"
       })
     } finally {

@@ -1,12 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { MenuItem } from "@/types/database"
 import { Plus, Minus, Image as ImageIcon } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import NextImage from "next/image"
-import { useMemo } from "react"
 
 interface ProductCardProps {
   item: MenuItem
@@ -18,21 +18,8 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", priority = false }: ProductCardProps) {
-  const imageSrc = useMemo(() => {
-    const raw = item.image_url?.trim()
-    if (!raw) return null
-    if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!supabaseUrl) return raw.startsWith("/") ? raw : `/${raw}`
-
-    if (raw.startsWith("/storage/")) return `${supabaseUrl}${raw}`
-    if (raw.startsWith("storage/")) return `${supabaseUrl}/${raw}`
-    if (raw.startsWith("menu-images/")) return `${supabaseUrl}/storage/v1/object/public/${raw}`
-
-    const cleaned = raw.replace(/^\/+/, "")
-    return `${supabaseUrl}/storage/v1/object/public/menu-images/${cleaned}`
-  }, [item.image_url])
+  const imageSrc = item.image_url?.trim() || null
+  const [imgError, setImgError] = useState(false)
 
   return (
     <Card
@@ -40,7 +27,7 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
       onClick={onAdd}
     >
       <div className="aspect-[4/3] bg-muted relative flex items-center justify-center">
-        {imageSrc ? (
+        {imageSrc && !imgError ? (
           <NextImage
             src={imageSrc}
             alt={item.name}
@@ -48,6 +35,7 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
             className="object-cover"
             sizes="(max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
             priority={priority}
+            onError={() => setImgError(true)}
           />
         ) : (
           <ImageIcon className="h-7 w-7 text-muted-foreground/40" />
