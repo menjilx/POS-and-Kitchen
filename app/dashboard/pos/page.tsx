@@ -903,7 +903,7 @@ export default function POSPage() {
       let notes = `Customer: ${currentSelectedCustomer?.name || 'Walk-in Customer'}${effectiveNote ? ` | Note: ${effectiveNote}` : ''}`
       if (additionalData) {
           if (additionalData.ref) notes += ` | Ref: ${additionalData.ref}`
-          if (additionalData.notes) notes += ` | PayNote: ${additionalData.notes}`
+          if (additionalData.notes) notes += ` | Note: ${additionalData.notes}`
           if (additionalData.attachment) notes += ` | Attach: ${additionalData.attachment}`
       }
 
