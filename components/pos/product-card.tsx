@@ -68,7 +68,7 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
             </Button>
           </div>
         ) : (
-          <Button className="w-full" variant="outline" onClick={(e) => e.stopPropagation()}>
+          <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); onAdd() }}>
             <Plus className="h-4 w-4 mr-2" />
             Add
           </Button>

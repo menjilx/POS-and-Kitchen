@@ -81,6 +81,7 @@ export function PaymentModal({
 
   // Card Support Info
   const [cardRef, setCardRef] = useState("")
+  const [cardLastFour, setCardLastFour] = useState("")
   const [paymentNotes, setPaymentNotes] = useState("")
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [currentDate] = useState(() => format(new Date(), "M-d-yyyy h:mm a"))
@@ -186,6 +187,7 @@ export function PaymentModal({
       setReceiptData(null)
       setIsFirstInput(true)
       setCardRef("")
+      setCardLastFour("")
       setPaymentNotes("")
       setAttachmentName(null)
       setSelectedDestination("")
@@ -269,6 +271,7 @@ export function PaymentModal({
       attachment: attachmentName,
       receivedAmount: paymentMethod === 'cash' ? amount : undefined,
       changeAmount: paymentMethod === 'cash' ? change : undefined,
+      cardLastFour: paymentMethod === 'card' ? cardLastFour : undefined,
     }, effectiveDestinationId)
 
     const finalReceiptData = {
@@ -596,6 +599,23 @@ export function PaymentModal({
 
                 {showTransactionDetails && (
                     <div className="space-y-4 bg-muted/20 p-4 rounded-lg border">
+                         {paymentMethod === 'card' && (
+                           <div className="space-y-2">
+                              <Label htmlFor="card-last-four" className="text-xs font-medium text-muted-foreground">Last 4 Digits</Label>
+                              <Input
+                                  id="card-last-four"
+                                  placeholder="e.g. 1234"
+                                  value={cardLastFour}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/\D/g, '').slice(0, 4)
+                                    setCardLastFour(val)
+                                  }}
+                                  maxLength={4}
+                                  inputMode="numeric"
+                                  className="h-9 bg-background"
+                              />
+                           </div>
+                         )}
                          <div className="space-y-2">
                             <Label htmlFor="card-ref" className="text-xs font-medium text-muted-foreground">{transactionRefLabel}</Label>
                             <Input 
@@ -630,7 +650,7 @@ export function PaymentModal({
                 <Button 
                     className="w-full h-12 text-lg font-bold" 
                     onClick={handleProcessPayment}
-                    disabled={isLoading || (paymentMethod === 'cash' && (parseFloat(receivedAmount) || 0) < totalAmount)}
+                    disabled={isLoading || (paymentMethod === 'cash' && (parseFloat(receivedAmount) || 0) < totalAmount) || (paymentMethod === 'card' && cardLastFour.length !== 4)}
                 >
                     {isLoading ? "Processing..." : `Pay ${formatCurrency(totalAmount, currency)}`}
                 </Button>

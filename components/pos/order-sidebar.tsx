@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MenuItem, Table, SaleType, Customer } from "@/types/database"
-import { Trash2, MoreHorizontal, Copy, TicketPercent, ChefHat } from "lucide-react"
+import { Trash2, MoreHorizontal, Copy, TicketPercent, ChefHat, Plus, Minus } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { CustomerDialog } from "./customer-dialog"
 import {
@@ -87,6 +87,7 @@ export function OrderSidebar({
   tables,
   cartItems,
   onRemoveItem,
+  onUpdateQuantity,
   onHoldOrder,
   onPay,
   onClearCart,
@@ -224,9 +225,28 @@ export function OrderSidebar({
               </div>
               <div className="flex-1">
                 <h4 className="text-sm font-medium line-clamp-2">{item.name}</h4>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-1 mt-1">
                   <p className="text-sm font-bold">{formatCurrency(item.selling_price, currency)}</p>
-                  <span className="text-xs text-muted-foreground">x {quantity}</span>
+                  <span className="text-xs text-muted-foreground mx-1">x</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6 rounded-md"
+                      onClick={() => onUpdateQuantity(item.id, -1)}
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <span className="text-sm font-medium w-6 text-center">{quantity}</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-6 w-6 rounded-md"
+                      onClick={() => onUpdateQuantity(item.id, 1)}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col justify-between items-end">

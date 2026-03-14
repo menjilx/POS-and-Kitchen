@@ -92,4 +92,5 @@ export type PaymentAdditionalData = {
   attachment?: string | null
   receivedAmount?: number
   changeAmount?: number
+  cardLastFour?: string
 }
