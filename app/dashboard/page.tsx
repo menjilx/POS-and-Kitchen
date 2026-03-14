@@ -9,7 +9,7 @@ import { DailySalesChart } from '@/components/dashboard/daily-sales-chart'
 import { DisplayStatusCard, type DisplayStatusRow } from '@/components/dashboard/display-status-card'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, TrendingDownIcon, TrendingUpIcon } from 'lucide-react'
+import { AlertTriangle, Loader2, TrendingDownIcon, TrendingUpIcon } from 'lucide-react'
 import type { UserRole } from '@/types/database'
 
 type DailySalesRow = {
@@ -43,6 +43,11 @@ type DashboardState = {
     status: string
     tableNumber: string | null
   }[]
+  openSessions: {
+    id: string
+    userName: string
+    openingTime: string
+  }[]
 }
 
 function isoDateUTC(date: Date) {
@@ -73,6 +78,7 @@ export default function DashboardPage() {
     totalDisplayReadyOrders: 0,
     totalDisplayUrgentOrders: 0,
     upcomingReservations: [],
+    openSessions: [],
   })
 
   const loadDisplayStatus = useCallback(async () => {
@@ -286,7 +292,7 @@ export default function DashboardPage() {
       const nowIso = new Date().toISOString()
       const next24Iso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-      const [salesRes, stockRes, salesItemsRes, prevMonthSalesRes, upcomingReservationsRes] = await Promise.all([
+      const [salesRes, stockRes, salesItemsRes, prevMonthSalesRes, upcomingReservationsRes, openSessionsRes] = await Promise.all([
         supabase
           .from('sales')
           .select('sale_date,total_amount')
@@ -318,6 +324,10 @@ export default function DashboardPage() {
               .order('reservation_time', { ascending: true })
               .limit(8)
           : Promise.resolve({ data: [], error: null }),
+        supabase
+          .from('cashier_sessions')
+          .select('id, opening_time, users(name)')
+          .eq('status', 'open'),
       ])
 
       if (salesRes.error) throw salesRes.error
@@ -325,6 +335,7 @@ export default function DashboardPage() {
       if (salesItemsRes.error) throw salesItemsRes.error
       if (prevMonthSalesRes.error) throw prevMonthSalesRes.error
       if (upcomingReservationsRes.error) throw upcomingReservationsRes.error
+      if (openSessionsRes.error) throw openSessionsRes.error
 
       const rows = ((salesRes.data ?? []) as unknown) as DailySalesRow[]
 
@@ -470,6 +481,20 @@ export default function DashboardPage() {
           }
         }) ?? []
 
+      const openSessions =
+        (((openSessionsRes.data ?? []) as unknown) as {
+          id: string
+          opening_time: string
+          users: { name: string } | { name: string }[] | null
+        }[]).map((s) => {
+          const userValue = Array.isArray(s.users) ? s.users[0] : s.users
+          return {
+            id: s.id,
+            userName: userValue?.name ?? 'Unknown',
+            openingTime: s.opening_time,
+          }
+        })
+
       void loadDisplayStatus()
 
       setState((prev) => ({
@@ -488,6 +513,7 @@ export default function DashboardPage() {
         lowStock: lowStock.slice(0, 5),
         topSelling,
         upcomingReservations,
+        openSessions,
       }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard data')
@@ -579,6 +605,25 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Overview of today’s performance</p>
       </div>
+
+      {state.openSessions.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <CardTitle className="text-base text-amber-800 dark:text-amber-200">
+                {state.openSessions.length} Open Register {state.openSessions.length === 1 ? 'Session' : 'Sessions'}
+              </CardTitle>
+            </div>
+            <CardDescription className="text-amber-700 dark:text-amber-300">
+              {state.openSessions.map((s) => s.userName).join(', ')} &mdash;{' '}
+              <Link href="/dashboard/reports/registers" className="underline hover:no-underline">
+                View details
+              </Link>
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard

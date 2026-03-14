@@ -195,10 +195,12 @@ const navGroups: NavGroup[] = [
 export function AppSidebar({
   user,
   appName,
+  appSubtitle,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   user: AppUser
   appName: string
+  appSubtitle: string
 }) {
   const pathname = usePathname()
   const { settings, loading } = useAppSettings()
@@ -245,7 +247,7 @@ export function AppSidebar({
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">{appName}</span>
-                  <span className="truncate text-xs">Kitchen System</span>
+                  <span className="truncate text-xs">{appSubtitle}</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -299,10 +301,10 @@ export function AppSidebar({
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Kitchen Display">
+            <SidebarMenuButton asChild tooltip="Order Display">
               <Link href="/dashboard/settings?tab=kds">
                 <ChefHat />
-                <span>Kitchen Display</span>
+                <span>Order Display</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

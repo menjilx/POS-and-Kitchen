@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 function createClient(request: NextRequest) {
-  let cookiesToSet: Parameters<NextResponse['cookies']['set']>[] = []
+  let supabaseResponse = NextResponse.next({ request })
 
   const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,19 +13,22 @@ function createClient(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(newCookies) {
-          cookiesToSet = newCookies.map(({ name, value, options }) => [name, value, options])
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
         },
       },
     }
   )
 
-  const applyCookies = (response: NextResponse) => {
-    cookiesToSet.forEach((args) => response.cookies.set(...args))
-    return response
-  }
+  const getResponse = () => supabaseResponse
 
-  return { client, applyCookies }
+  return { client, getResponse }
 }
 
 export async function proxy(request: NextRequest) {
@@ -42,25 +45,28 @@ export async function proxy(request: NextRequest) {
   }
 
   // Handle Standard Routes with Default Client
-  const { client: supabase, applyCookies } = createClient(request)
-  const { data: { session } } = await supabase.auth.getSession()
+  const { client: supabase, getResponse } = createClient(request)
+
+  // IMPORTANT: Use getUser() instead of getSession() so the token
+  // is validated server-side and refreshed cookies are written back.
+  const { data: { user } } = await supabase.auth.getUser()
 
   if (path === '/login' || path === '/signup' || path === '/auth/callback') {
-    if (session && (path === '/login' || path === '/signup')) {
-      return applyCookies(NextResponse.redirect(new URL('/dashboard', request.url)))
+    if (user && (path === '/login' || path === '/signup')) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
     }
-    return applyCookies(NextResponse.next())
+    return getResponse()
   }
 
-  if (path.startsWith('/dashboard') || path.startsWith('/kds')) {
-    if (!session) {
+  if (path.startsWith('/dashboard')) {
+    if (!user) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', path)
-      return applyCookies(NextResponse.redirect(loginUrl))
+      return NextResponse.redirect(loginUrl)
     }
   }
 
-  return applyCookies(NextResponse.next())
+  return getResponse()
 }
 
 export const matcher = [

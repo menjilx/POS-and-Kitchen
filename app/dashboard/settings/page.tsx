@@ -26,6 +26,8 @@ import { uploadFile } from '@/app/actions/storage'
 import { PrinterSettingsPanel } from '@/components/printer/printer-settings'
 
 interface SettingsFormData {
+  app_name: string
+  app_subtitle: string
   currency: string
   timezone: string
   tax_rate: number
@@ -62,6 +64,8 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState<SettingsFormData>({
+    app_name: 'Kitchen System',
+    app_subtitle: 'Kitchen System',
     currency: 'USD',
     timezone: 'UTC',
     tax_rate: 0,
@@ -116,7 +120,7 @@ export default function SettingsPage() {
       const { data: settingsRows } = await supabase
         .from('app_settings')
         .select('key, value')
-        .in('key', ['currency', 'timezone', 'tax_rate', 'payment_methods', 'receipt_settings', 'features_menu'])
+        .in('key', ['app_name', 'app_subtitle', 'currency', 'timezone', 'tax_rate', 'payment_methods', 'receipt_settings', 'features_menu'])
 
       if (settingsRows) {
         const settingsMap = new Map<string, string>()
@@ -126,6 +130,10 @@ export default function SettingsPage() {
 
         setSettings(prev => {
           const next = { ...prev }
+          const appName = settingsMap.get('app_name')
+          if (appName) next.app_name = appName
+          const appSubtitle = settingsMap.get('app_subtitle')
+          if (appSubtitle) next.app_subtitle = appSubtitle
           const currency = settingsMap.get('currency')
           if (currency) next.currency = currency
           const timezone = settingsMap.get('timezone')
@@ -152,7 +160,7 @@ export default function SettingsPage() {
         })
       }
 
-      // Fetch kitchen displays
+      // Fetch order displays
       const { data: displaysData } = await supabase
         .from('kitchen_displays')
         .select('*')
@@ -300,6 +308,8 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       const updates: Array<{ key: string; value: string }> = [
+        { key: 'app_name', value: settings.app_name },
+        { key: 'app_subtitle', value: settings.app_subtitle },
         { key: 'currency', value: settings.currency },
         { key: 'timezone', value: settings.timezone },
         { key: 'tax_rate', value: String(settings.tax_rate) },
@@ -351,7 +361,7 @@ export default function SettingsPage() {
         setNewDisplayName('')
         toast({
           title: 'Success',
-          description: 'Kitchen Display created',
+          description: 'Order Display created',
         })
       }
     } catch (error) {
@@ -560,7 +570,7 @@ export default function SettingsPage() {
               }`}
             >
               <Monitor size={20} />
-              <span>Kitchen Displays</span>
+              <span>Order Displays</span>
             </button>
             <button
               onClick={() => setActiveTab('discounts')}
@@ -615,6 +625,34 @@ export default function SettingsPage() {
               <h2 className="text-xl font-bold text-slate-800">General Settings</h2>
               
               <div className="space-y-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">App Name</label>
+                  <input
+                    type="text"
+                    value={settings.app_name}
+                    onChange={(e) => setSettings({ ...settings, app_name: e.target.value })}
+                    placeholder="Kitchen System"
+                    className="w-full px-3 py-2 border rounded-md"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The name displayed in the sidebar header.
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">App Subtitle</label>
+                  <input
+                    type="text"
+                    value={settings.app_subtitle}
+                    onChange={(e) => setSettings({ ...settings, app_subtitle: e.target.value })}
+                    placeholder="Kitchen System"
+                    className="w-full px-3 py-2 border rounded-md"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The subtitle displayed below the app name in the sidebar.
+                  </p>
+                </div>
+
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">Currency</label>
                   <select
@@ -693,7 +731,7 @@ export default function SettingsPage() {
           {activeTab === 'kds' && (
             <div className="bg-white rounded-lg border p-6 space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-slate-800">Kitchen Displays</h2>
+                <h2 className="text-xl font-bold text-slate-800">Order Displays</h2>
               </div>
 
               <div className="flex gap-2">
@@ -748,8 +786,21 @@ export default function SettingsPage() {
                             {`${window.location.origin}/kds?token=${display.token}`}
                           </div>
                           <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(`${window.location.origin}/kds?token=${display.token}`)
+                            onClick={async () => {
+                              const url = `${window.location.origin}/kds?token=${display.token}`
+                              try {
+                                await navigator.clipboard.writeText(url)
+                              } catch {
+                                // Fallback for non-HTTPS contexts
+                                const textarea = document.createElement('textarea')
+                                textarea.value = url
+                                textarea.style.position = 'fixed'
+                                textarea.style.opacity = '0'
+                                document.body.appendChild(textarea)
+                                textarea.select()
+                                document.execCommand('copy')
+                                document.body.removeChild(textarea)
+                              }
                               toast({
                                 title: 'Copied',
                                 description: 'Link copied to clipboard',
@@ -783,7 +834,7 @@ export default function SettingsPage() {
 
                 {displays.length === 0 && (
                   <div className="text-center py-8 text-slate-500">
-                    No kitchen displays created yet.
+                    No order displays created yet.
                   </div>
                 )}
               </div>

@@ -72,10 +72,13 @@ const getPrepTime = (sale: Sale) => {
   if (!end) return 'In Progress'
 
   const diffMs = end - start
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffSecs = Math.floor((diffMs % 60000) / 1000)
+  const totalSecs = Math.floor(diffMs / 1000)
+  const hours = Math.floor(totalSecs / 3600)
+  const mins = Math.floor((totalSecs % 3600) / 60)
+  const secs = totalSecs % 60
 
-  return `${diffMins}m ${diffSecs}s`
+  if (hours > 0) return `${hours}h ${mins}m ${secs}s`
+  return `${mins}m ${secs}s`
 }
 
 const getStatusColor = (status: string) => {

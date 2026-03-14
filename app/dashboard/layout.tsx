@@ -50,17 +50,18 @@ export default async function DashboardLayoutWrapper({
     )
   }
 
-  // Fetch app name from app_settings
-  const { data: appNameSetting } = await supabase
+  // Fetch app name and subtitle from app_settings
+  const { data: appSettings } = await supabase
     .from('app_settings')
-    .select('value')
-    .eq('key', 'app_name')
-    .single()
+    .select('key, value')
+    .in('key', ['app_name', 'app_subtitle'])
 
-  const appName = appNameSetting?.value ?? 'Restaurant'
+  const settingsMap = new Map(appSettings?.map(r => [r.key, r.value]) ?? [])
+  const appName = settingsMap.get('app_name') ?? 'Kitchen System'
+  const appSubtitle = settingsMap.get('app_subtitle') ?? 'Kitchen System'
 
   return (
-    <DashboardLayout user={userData} appName={appName}>
+    <DashboardLayout user={userData} appName={appName} appSubtitle={appSubtitle}>
       {children}
     </DashboardLayout>
   )
