@@ -17,12 +17,22 @@ import {
 } from "@/components/ui/select"
 
 function CurrentTime() {
-    const [time, setTime] = useState<Date>(() => new Date())
+    const [time, setTime] = useState<Date | null>(null)
 
     useEffect(() => {
+        setTime(new Date())
         const timer = setInterval(() => setTime(new Date()), 1000)
         return () => clearInterval(timer)
     }, [])
+
+    if (!time) {
+        return (
+            <div className="text-right">
+                <div className="text-2xl font-bold font-mono">&nbsp;</div>
+                <div className="text-sm text-muted-foreground">&nbsp;</div>
+            </div>
+        )
+    }
 
     return (
         <div className="text-right">

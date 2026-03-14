@@ -929,7 +929,7 @@ export default function SaleDetailPage() {
                     )}
                     {(sale.payment_notes || parsedPaymentData?.notes) && (
                       <div>
-                        <p className="text-sm text-muted-foreground">Payment Notes</p>
+                        <p className="text-sm text-muted-foreground">Note</p>
                         <p className="text-sm">{sale.payment_notes || parsedPaymentData?.notes}</p>
                       </div>
                     )}

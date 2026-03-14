@@ -269,7 +269,7 @@ export function OrderDetailsModal({
             </div>
             {paymentNotes && (
                 <div className="mt-3 p-2 bg-sky-50 text-sky-800 text-xs rounded border border-sky-100">
-                    <span className="font-semibold">Payment Notes:</span> {paymentNotes}
+                    <span className="font-semibold">Note:</span> {paymentNotes}
                 </div>
             )}
             {notes && (
