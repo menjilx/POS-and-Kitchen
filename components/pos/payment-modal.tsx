@@ -349,11 +349,39 @@ export function PaymentModal({
       // Wait a frame for layout to settle
       await new Promise((r) => requestAnimationFrame(r))
 
+      // Pre-convert cross-origin images to data URLs to avoid CORS errors in html2canvas
+      const imgs = receiptRef.current.querySelectorAll('img')
+      const originalSrcs: { img: HTMLImageElement; src: string }[] = []
+      await Promise.all(
+        Array.from(imgs).map(async (img) => {
+          if (img.src && !img.src.startsWith('data:')) {
+            try {
+              const resp = await fetch(img.src)
+              const blob = await resp.blob()
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader()
+                reader.onloadend = () => resolve(reader.result as string)
+                reader.readAsDataURL(blob)
+              })
+              originalSrcs.push({ img, src: img.src })
+              img.src = dataUrl
+            } catch {
+              // If fetch fails, leave the original src — html2canvas will skip it
+            }
+          }
+        })
+      )
+
       const canvas = await html2canvas(receiptRef.current, {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
       })
+
+      // Restore original image sources
+      for (const { img, src } of originalSrcs) {
+        img.src = src
+      }
 
       // Restore original class
       if (root) {
