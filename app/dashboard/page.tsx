@@ -326,7 +326,7 @@ export default function DashboardPage() {
           : Promise.resolve({ data: [], error: null }),
         supabase
           .from('cashier_sessions')
-          .select('id, opening_time, users(name)')
+          .select('id, opening_time, users(full_name)')
           .eq('status', 'open'),
       ])
 
@@ -485,12 +485,12 @@ export default function DashboardPage() {
         (((openSessionsRes.data ?? []) as unknown) as {
           id: string
           opening_time: string
-          users: { name: string } | { name: string }[] | null
+          users: { full_name: string } | { full_name: string }[] | null
         }[]).map((s) => {
           const userValue = Array.isArray(s.users) ? s.users[0] : s.users
           return {
             id: s.id,
-            userName: userValue?.name ?? 'Unknown',
+            userName: userValue?.full_name ?? 'Unknown',
             openingTime: s.opening_time,
           }
         })
