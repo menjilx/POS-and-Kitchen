@@ -413,14 +413,25 @@ function KDSContent() {
     const notes = order.sales?.notes ?? ''
     if (notes.startsWith('Customer: ')) {
       let name = notes.replace('Customer: ', '')
-      if (name.includes(' | Note: ')) {
-        name = name.split(' | Note: ')[0]
+      if (name.includes(' | ')) {
+        name = name.split(' | ')[0]
       }
       const trimmed = name.trim()
       if (trimmed) return trimmed
     }
 
     return 'Guest'
+  }
+
+  const getOrderNote = (order: OrderWithItems) => {
+    const notes = order.sales?.notes ?? ''
+    const parts = notes.split(' | ')
+    for (const part of parts) {
+      if (part.startsWith('Note: ') || part.startsWith('PayNote: ')) {
+        return part.replace('PayNote: ', 'Note: ')
+      }
+    }
+    return null
   }
 
   const getTableNumber = (order: OrderWithItems) => {
@@ -557,6 +568,9 @@ function KDSContent() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-semibold text-gray-900 truncate">
                           {getCustomerName(order)}
+                          {getOrderNote(order) && (
+                            <span className="text-xs font-normal text-gray-600 ml-1">{getOrderNote(order)}</span>
+                          )}
                         </div>
                         {getTableNumber(order) && (
                           <span className="text-xs text-gray-600 font-medium bg-gray-100 px-2 py-1 rounded whitespace-nowrap">
