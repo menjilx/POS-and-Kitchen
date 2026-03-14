@@ -29,6 +29,11 @@ export interface Transaction {
   time: string
   itemsCount: number
   tableNumber?: string
+  discountAmount?: number
+  taxAmount?: number
+  paymentRef?: string
+  cardLastFour?: string
+  paymentNotes?: string
 }
 
 type SaleItemRow = {
@@ -50,6 +55,10 @@ type SaleRow = {
   notes: string | null
   sale_items: SaleItemRow[] | null
   tables: SaleTableRow[] | SaleTableRow | null
+  discount_amount: number | null
+  tax_amount: number | null
+  payment_data: Record<string, unknown> | null
+  payment_notes: string | null
 }
 
 interface TransactionsModalProps {
@@ -96,6 +105,10 @@ export function TransactionsModal({
           customer_id,
           notes,
           created_at,
+          discount_amount,
+          tax_amount,
+          payment_data,
+          payment_notes,
           tables (table_number),
           sale_items (quantity)
         `)
@@ -123,6 +136,7 @@ export function TransactionsModal({
         }
 
         const table = Array.isArray(s.tables) ? s.tables[0] : s.tables
+        const pd = s.payment_data as Record<string, unknown> | null
 
         return {
           id: s.id,
@@ -134,7 +148,12 @@ export function TransactionsModal({
           date: new Date(s.sale_date).toLocaleDateString(),
           time: new Date(s.sale_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           itemsCount: (s.sale_items ?? []).reduce((acc, item) => acc + (item.quantity ?? 0), 0),
-          tableNumber: table?.table_number ?? undefined
+          tableNumber: table?.table_number ?? undefined,
+          discountAmount: s.discount_amount ?? undefined,
+          taxAmount: s.tax_amount ?? undefined,
+          paymentRef: (pd?.ref as string) || undefined,
+          cardLastFour: (pd?.cardLastFour as string) || undefined,
+          paymentNotes: s.payment_notes ?? undefined,
         }
       })
 
@@ -186,18 +205,24 @@ export function TransactionsModal({
   const handleDownloadReport = () => {
     if (transactions.length === 0) return
 
-    const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Payment Method", "Status"]
+    const escCsv = (val: string) => `"${val.replace(/"/g, '""')}"`
+    const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Discount", "Tax", "Payment Method", "Payment Ref", "Card Last Four", "Payment Notes", "Status"]
     const csvContent = [
         headers.join(","),
         ...transactions.map(t => [
             t.orderNumber,
             t.date,
             t.time,
-            `"${t.customerName.replace(/"/g, '""')}"`,
+            escCsv(t.customerName),
             t.tableNumber || "",
             t.itemsCount,
             t.totalAmount,
+            t.discountAmount || 0,
+            t.taxAmount || 0,
             t.paymentMethod || "",
+            t.paymentRef || "",
+            t.cardLastFour || "",
+            escCsv(t.paymentNotes || ""),
             t.paymentStatus
         ].join(","))
     ].join("\n")

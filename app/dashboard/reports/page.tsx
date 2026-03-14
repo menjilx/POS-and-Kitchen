@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Calendar } from 'lucide-react'
+import { Calendar, FileDown } from 'lucide-react'
 import { useAppSettings } from '@/hooks/use-app-settings'
+import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table'
 import { ColumnDef } from '@tanstack/react-table'
 
@@ -188,6 +189,54 @@ export default function ReportsPage() {
     return new Date(dateStr).toLocaleDateString()
   }
 
+  const exportMenuPerformanceCsv = () => {
+    if (menuPerformance.length === 0) return
+    const headers = ["Menu Item", "Quantity Sold", "Revenue", "Total Cost", "Total Margin", "Margin %"]
+    const csvContent = [
+      headers.join(","),
+      ...menuPerformance.map(r => [
+        `"${r.menu_item_name.replace(/"/g, '""')}"`,
+        r.quantity_sold,
+        r.total_revenue,
+        r.total_cost,
+        r.total_margin,
+        r.margin_percentage.toFixed(1)
+      ].join(","))
+    ].join("\n")
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", `menu_performance_export_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const exportStockItemTrendsCsv = () => {
+    if (ingredientTrends.length === 0) return
+    const headers = ["Stock Item", "Unit", "Avg Cost/Unit", "Last Cost", "Total Purchased", "Cost Change %"]
+    const csvContent = [
+      headers.join(","),
+      ...ingredientTrends.map(r => [
+        `"${r.stock_item_name.replace(/"/g, '""')}"`,
+        r.unit,
+        r.avg_cost_per_unit,
+        r.last_cost_per_unit,
+        r.total_purchased.toFixed(2),
+        r.cost_change_percentage.toFixed(1)
+      ].join(","))
+    ].join("\n")
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.setAttribute("href", url)
+    link.setAttribute("download", `stock_item_trends_export_${new Date().toISOString().split('T')[0]}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
   const getTabDescription = () => {
     switch (activeTab) {
       case 'pnl':
@@ -317,7 +366,15 @@ export default function ReportsPage() {
             <p className="text-sm text-muted-foreground">Try adjusting the date range or ensure you have recorded sales.</p>
           </div>
         ) : (
-          <DataTable columns={menuColumns} data={menuPerformance} />
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={exportMenuPerformanceCsv}>
+                <FileDown className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            </div>
+            <DataTable columns={menuColumns} data={menuPerformance} />
+          </div>
         )
       ) : (
         ingredientTrends.length === 0 ? (
@@ -326,7 +383,15 @@ export default function ReportsPage() {
             <p className="text-sm text-muted-foreground">Add stock items and record purchases to see cost trends.</p>
           </div>
         ) : (
-          <DataTable columns={ingredientColumns} data={ingredientTrends} />
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={exportStockItemTrendsCsv}>
+                <FileDown className="mr-2 h-4 w-4" />
+                Export
+              </Button>
+            </div>
+            <DataTable columns={ingredientColumns} data={ingredientTrends} />
+          </div>
         )
       )}
     </div>

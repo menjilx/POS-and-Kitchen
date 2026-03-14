@@ -156,24 +156,45 @@ export function SalesTable({ data, currency, canDelete, paymentMethods }: SalesT
 
   // Export function
   const exportToCsv = () => {
-    const headers = ["Order #", "Type", "Items", "Amount", "Payment Method", "Payment Status", "Display Status", "Date"]
-    const rows = table.getFilteredRowModel().rows.map(row => {
-      const itemsCount = (row.original.sale_items ?? []).reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+    const escCsv = (val: string) => `"${val.replace(/"/g, '""')}"`
+    const headers = ["Order #", "Type", "Items", "Amount", "Discount", "Tax", "Payment Method", "Payment Ref", "Card Last Four", "Payment Status", "Payment Notes", "Customer", "Table", "Display Status", "Date"]
+    const csvRows = table.getFilteredRowModel().rows.map(row => {
+      const s = row.original
+      const itemsCount = (s.sale_items ?? []).reduce((sum, item) => sum + (item.quantity ?? 0), 0)
+      const pd = s.payment_data as Record<string, unknown> | null | undefined
+      const paymentRef = (pd?.ref as string) || ""
+      const cardLastFour = (pd?.cardLastFour as string) || ""
+      let customerName = ""
+      if (s.notes?.startsWith("Customer: ")) {
+        customerName = s.notes.replace("Customer: ", "")
+        if (customerName.includes(" | Note: ")) {
+          customerName = customerName.split(" | Note: ")[0]
+        }
+      }
+      const tableRel = s.tables
+      const tableNum = Array.isArray(tableRel) ? tableRel[0]?.table_number : tableRel?.table_number
       return [
-        row.original.order_number,
-        row.original.sale_type,
+        s.order_number,
+        s.sale_type,
         itemsCount,
-        row.original.total_amount,
-        row.original.payment_method,
-        row.original.payment_status,
+        s.total_amount,
+        s.discount_amount || 0,
+        s.tax_amount || 0,
+        s.payment_method || "",
+        paymentRef,
+        cardLastFour,
+        s.payment_status,
+        escCsv(s.payment_notes || ""),
+        escCsv(customerName),
+        tableNum || "",
         row.getValue("kds_status"),
-        `"${new Date(row.original.sale_time).toLocaleString()}"`
+        escCsv(new Date(s.sale_time).toLocaleString())
       ]
     })
 
     const csvContent = [
       headers.join(","),
-      ...rows.map(e => e.join(","))
+      ...csvRows.map(e => e.join(","))
     ].join("\n")
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

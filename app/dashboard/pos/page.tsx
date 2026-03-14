@@ -62,6 +62,8 @@ type SaleReportRow = {
   notes: string | null
   tables: SaleReportTable | SaleReportTable[] | null
   sale_items: SaleReportItem[] | null
+  payment_data: Record<string, unknown> | null
+  payment_notes: string | null
 }
 
 function OrderQueueSkeleton() {
@@ -123,15 +125,15 @@ function CategoryFilterSkeleton() {
 function ProductGridSkeleton() {
   return (
     <div>
-      <Skeleton className="h-6 w-[120px] mb-4" />
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 8 }).map((_, idx) => (
+      <Skeleton className="h-5 w-[100px] mb-3" />
+      <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5">
+        {Array.from({ length: 12 }).map((_, idx) => (
           <Card key={idx} className="overflow-hidden">
-            <Skeleton className="aspect-4/3 w-full rounded-none" />
-            <CardContent className="p-4">
-              <Skeleton className="h-4 w-3/4 mb-2" />
-              <Skeleton className="h-6 w-24 mb-3" />
-              <Skeleton className="h-9 w-full" />
+            <Skeleton className="aspect-[4/2.5] w-full rounded-none" />
+            <CardContent className="p-2.5">
+              <Skeleton className="h-3.5 w-3/4 mb-1" />
+              <Skeleton className="h-4 w-16 mb-2" />
+              <Skeleton className="h-8 w-full" />
             </CardContent>
           </Card>
         ))}
@@ -607,6 +609,8 @@ export default function POSPage() {
                 notes,
                 discount_amount,
                 tax_amount,
+                payment_data,
+                payment_notes,
                 tables (table_number),
                 sale_items (quantity)
             `)
@@ -622,8 +626,9 @@ export default function POSPage() {
         }
 
         const rows = (data as unknown) as (SaleReportRow & { discount_amount: number, tax_amount: number })[]
+        const escCsv = (val: string) => `"${val.replace(/"/g, '""')}"`
 
-        const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Discount", "Tax", "Payment Method", "Status"]
+        const headers = ["Order #", "Date", "Time", "Customer", "Table", "Items", "Total", "Discount", "Tax", "Payment Method", "Payment Ref", "Card Last Four", "Payment Notes", "Status"]
         const csvContent = [
             headers.join(","),
             ...rows.map((s) => {
@@ -647,17 +652,24 @@ export default function POSPage() {
                     status = 'void'
                 }
 
+                const pd = s.payment_data as Record<string, unknown> | null
+                const paymentRef = (pd?.ref as string) || ""
+                const cardLastFour = (pd?.cardLastFour as string) || ""
+
                 return [
                     s.order_number,
                     new Date(s.sale_date).toLocaleDateString(),
                     new Date(s.sale_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    `"${name.replace(/"/g, '""')}"`,
+                    escCsv(name),
                     tableNum || "",
                     itemsCount,
                     s.total_amount,
                     s.discount_amount || 0,
                     s.tax_amount || 0,
                     s.payment_method || "",
+                    paymentRef,
+                    cardLastFour,
+                    escCsv(s.payment_notes || ""),
                     status
                 ].join(",")
             })

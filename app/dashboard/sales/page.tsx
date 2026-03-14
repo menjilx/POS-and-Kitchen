@@ -38,7 +38,7 @@ export default async function SalesPage() {
   ] = await Promise.all([
     supabase
       .from('sales')
-      .select('*, kds_orders(status, started_at, completed_at), sale_items(quantity)')
+      .select('*, kds_orders(status, started_at, completed_at), sale_items(quantity), tables(table_number)')
       .order('sale_time', { ascending: false })
       .limit(1000),
     supabase.from('app_settings').select('value').eq('key', 'currency').single(),

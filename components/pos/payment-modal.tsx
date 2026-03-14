@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { formatCurrency } from "@/lib/utils"
+import html2canvas from "html2canvas"
 import { User, X, Receipt, Printer, Download, Paperclip, Bluetooth, Wifi } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -325,9 +326,57 @@ export function PaymentModal({
     setPrintingReceipt(true)
   }
 
-  const handleDownloadReceipt = () => {
-    if (!receiptData) return
-    setPrintingReceipt(true)
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const handleDownloadReceipt = async () => {
+    if (!receiptData || !receiptRef.current) return
+    setIsDownloading(true)
+    try {
+      // Temporarily make the receipt visible offscreen for capture
+      // The root div has `hidden` (display:none) when not printing, so we must reveal it
+      const root = receiptRef.current.closest('.pos-receipt-print-root') as HTMLElement | null
+      const prevClassName = root?.className ?? ''
+      if (root) {
+        root.className = 'pos-receipt-print-root'
+        root.style.position = 'fixed'
+        root.style.left = '-9999px'
+        root.style.top = '0'
+        root.style.width = '380px'
+        root.style.zIndex = '-1'
+        root.style.background = '#ffffff'
+      }
+
+      // Wait a frame for layout to settle
+      await new Promise((r) => requestAnimationFrame(r))
+
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      })
+
+      // Restore original class
+      if (root) {
+        root.className = prevClassName
+        root.style.position = ''
+        root.style.left = ''
+        root.style.top = ''
+        root.style.width = ''
+        root.style.zIndex = ''
+        root.style.background = ''
+      }
+
+      const link = document.createElement('a')
+      const safeOrder = (receiptData.orderNumber || 'receipt').replace(/[^a-z0-9_-]+/gi, '_')
+      link.download = `${safeOrder}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    } catch {
+      // Fallback to browser print (save as PDF)
+      setPrintingReceipt(true)
+    } finally {
+      setIsDownloading(false)
+    }
   }
 
   const canUseDom = typeof document !== "undefined"
@@ -404,8 +453,8 @@ export function PaymentModal({
                     {printerMethod === 'bluetooth' ? <Bluetooth className="mr-2 h-4 w-4" /> : printerMethod === 'network' ? <Wifi className="mr-2 h-4 w-4" /> : <Printer className="mr-2 h-4 w-4" />}
                     {bluetoothPrinter.isPrinting ? 'Printing...' : 'Print'}
                 </Button>
-                <Button className="flex-1" variant="outline" onClick={handleDownloadReceipt} disabled={!receiptData}>
-                    <Download className="mr-2 h-4 w-4" /> Download
+                <Button className="flex-1" variant="outline" onClick={handleDownloadReceipt} disabled={!receiptData || isDownloading}>
+                    <Download className="mr-2 h-4 w-4" /> {isDownloading ? 'Downloading...' : 'Download'}
                 </Button>
             </div>
             

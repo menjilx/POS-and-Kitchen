@@ -39,37 +39,37 @@ export function ProductCard({ item, quantity, onAdd, onRemove, currency = "$", p
       className={`overflow-hidden transition-all hover:shadow-md cursor-pointer active:scale-[0.98] ${quantity > 0 ? "ring-2 ring-primary" : ""}`}
       onClick={onAdd}
     >
-      <div className="aspect-4/3 bg-muted relative flex items-center justify-center">
+      <div className="aspect-[4/2.5] bg-muted relative flex items-center justify-center">
         {imageSrc ? (
-          <NextImage 
-            src={imageSrc} 
-            alt={item.name} 
+          <NextImage
+            src={imageSrc}
+            alt={item.name}
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            sizes="(max-width: 768px) 33vw, (max-width: 1024px) 25vw, 16vw"
             priority={priority}
           />
         ) : (
-          <ImageIcon className="h-10 w-10 text-muted-foreground opacity-50" />
+          <ImageIcon className="h-8 w-8 text-muted-foreground opacity-50" />
         )}
       </div>
-      <CardContent className="p-4">
-        <h3 className="font-semibold text-sm line-clamp-1 mb-1">{item.name}</h3>
-        <p className="text-lg font-bold mb-3">{formatCurrency(item.selling_price, currency)}</p>
-        
+      <CardContent className="p-2.5">
+        <h3 className="font-semibold text-xs line-clamp-1 mb-0.5">{item.name}</h3>
+        <p className="text-sm font-bold mb-2">{formatCurrency(item.selling_price, currency)}</p>
+
         {quantity > 0 ? (
-          <div className="flex items-center justify-between bg-secondary/50 rounded-lg p-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={(e) => { e.stopPropagation(); onRemove() }}>
-              <Minus className="h-4 w-4" />
+          <div className="flex items-center justify-between bg-secondary/50 rounded-lg p-0.5">
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={(e) => { e.stopPropagation(); onRemove() }}>
+              <Minus className="h-3.5 w-3.5" />
             </Button>
-            <span className="font-medium text-sm">{quantity}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md" onClick={(e) => { e.stopPropagation(); onAdd() }}>
-              <Plus className="h-4 w-4" />
+            <span className="font-medium text-xs">{quantity}</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md" onClick={(e) => { e.stopPropagation(); onAdd() }}>
+              <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
         ) : (
-          <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); onAdd() }}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button className="w-full h-8 text-xs" variant="outline" onClick={(e) => { e.stopPropagation(); onAdd() }}>
+            <Plus className="h-3.5 w-3.5 mr-1" />
             Add
           </Button>
         )}

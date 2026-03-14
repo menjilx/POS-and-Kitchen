@@ -23,6 +23,12 @@ export type Sale = {
   sale_time: string
   kds_orders: SaleKdsOrder | SaleKdsOrder[] | null
   sale_items?: { quantity: number | null }[] | null
+  payment_data?: Record<string, unknown> | null
+  payment_notes?: string | null
+  discount_amount?: number | null
+  tax_amount?: number | null
+  notes?: string | null
+  tables?: { table_number: string | null } | { table_number: string | null }[] | null
 }
 
 export const getKdsStatus = (sale: Sale) => {
