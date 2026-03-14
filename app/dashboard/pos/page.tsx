@@ -1160,7 +1160,7 @@ export default function POSPage() {
             </Button>
             <Button variant="outline" onClick={() => setShowTransactionsModal(true)} className="gap-2">
                 <List className="h-4 w-4" />
-                All Orders
+                Recent Orders
             </Button>
             {cashierSession && (
             <Button 

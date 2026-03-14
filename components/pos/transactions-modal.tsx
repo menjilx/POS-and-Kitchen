@@ -13,9 +13,13 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { formatCurrency } from "@/lib/utils"
-import { Clock, User, Search, RefreshCcw, Ban, Loader2, Download } from "lucide-react"
+import { Clock, User, Search, RefreshCcw, Ban, Loader2, Download, Printer } from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { useAppSettings } from "@/hooks/use-app-settings"
+import { normalizeReceiptSettings, type ReceiptData } from "@/components/receipt/printable-receipt"
+import { useBluetoothPrinter } from "@/hooks/use-bluetooth-printer"
+import { printToNetwork } from "@/lib/print-client"
 import type { CashierSession } from "@/types/database"
 
 export interface Transaction {
@@ -72,6 +76,30 @@ interface TransactionsModalProps {
   currency?: string
 }
 
+type SaleItemDetail = {
+  quantity: number
+  unit_price: number
+  menu_items: { name: string } | null
+}
+
+type SaleDetailForReceipt = {
+  id: string
+  order_number: string
+  sale_time: string
+  total_amount: number
+  tax_amount: number
+  discount_amount: number
+  discount_name: string | null
+  payment_status: string
+  payment_method: string | null
+  payment_notes: string | null
+  payment_data: Record<string, unknown> | null
+  notes: string | null
+  sale_items: SaleItemDetail[]
+  customers: { name: string } | null
+  cashier: { full_name: string | null; email: string } | null
+}
+
 export function TransactionsModal({
   isOpen,
   onClose,
@@ -83,10 +111,15 @@ export function TransactionsModal({
   currency = "$"
 }: TransactionsModalProps) {
   const { toast } = useToast()
+  const { settings: tenantSettings } = useAppSettings()
+  const printerMethod = tenantSettings.printer?.method ?? 'browser'
+  const btPaperWidth = tenantSettings.printer?.bluetooth?.paperWidth ?? 80
+  const bluetoothPrinter = useBluetoothPrinter(btPaperWidth)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [processingId, setProcessingId] = useState<string | null>(null)
+  const [reprintingId, setReprintingId] = useState<string | null>(null)
 
   const fetchTransactions = useCallback(async () => {
     if (!session) return
@@ -199,6 +232,89 @@ export function TransactionsModal({
       console.error(error)
     } finally {
       setProcessingId(null)
+    }
+  }
+
+  const handleReprint = async (transaction: Transaction) => {
+    setReprintingId(transaction.id)
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .select(`
+          id, order_number, sale_time, total_amount, tax_amount,
+          discount_amount, discount_name, payment_status, payment_method,
+          payment_notes, payment_data, notes,
+          sale_items (quantity, unit_price, menu_items (name)),
+          customers (name),
+          cashier:users!sales_created_by_fkey (full_name, email)
+        `)
+        .eq('id', transaction.id)
+        .single()
+
+      if (error || !data) {
+        toast({ title: "Error", description: "Failed to load order details for printing", variant: "destructive" })
+        return
+      }
+
+      const sale = data as unknown as SaleDetailForReceipt
+      const pd = sale.payment_data
+      const subtotal = sale.total_amount - (sale.tax_amount ?? 0) + (sale.discount_amount ?? 0)
+      const cashierName = sale.cashier?.full_name || sale.cashier?.email || undefined
+
+      let customerName = sale.customers?.name || "Walk-in Customer"
+      if (!sale.customers && sale.notes?.startsWith("Customer: ")) {
+        customerName = sale.notes.replace("Customer: ", "").split(" | Note: ")[0]
+      }
+
+      const receiptData: ReceiptData = {
+        items: (sale.sale_items ?? []).map((item) => ({
+          name: item.menu_items?.name || "Unknown Item",
+          quantity: item.quantity,
+          price: item.unit_price,
+        })),
+        subtotal,
+        tax: sale.tax_amount ?? 0,
+        discount: sale.discount_amount ?? 0,
+        discountName: sale.discount_name ?? undefined,
+        total: sale.total_amount,
+        cashierName,
+        customerName,
+        orderNumber: sale.order_number,
+        date: new Date(sale.sale_time).toLocaleString(),
+        paymentMethod: sale.payment_method ?? undefined,
+        paymentStatus: sale.payment_status,
+        paymentRef: (pd?.ref as string) || undefined,
+        paymentNotes: sale.payment_notes ?? (pd?.notes as string) ?? undefined,
+        receivedAmount: typeof pd?.receivedAmount === 'number' ? pd.receivedAmount : undefined,
+        changeAmount: typeof pd?.changeAmount === 'number' ? pd.changeAmount : undefined,
+        currency,
+      }
+
+      const rs = normalizeReceiptSettings(tenantSettings.receipt)
+
+      if (printerMethod === 'bluetooth' && bluetoothPrinter.state === 'connected') {
+        try {
+          await bluetoothPrinter.printReceipt(receiptData, rs)
+          toast({ title: "Printed", description: `Receipt for ${transaction.orderNumber} sent to printer` })
+          return
+        } catch { /* fallback */ }
+      }
+
+      if (printerMethod === 'network') {
+        const result = await printToNetwork(receiptData, rs)
+        if (result.success) {
+          toast({ title: "Printed", description: `Receipt for ${transaction.orderNumber} sent to printer` })
+          return
+        }
+      }
+
+      // Fallback: open sales detail page for browser print
+      window.open(`/dashboard/sales/${transaction.id}`, '_blank')
+    } catch (err) {
+      console.error(err)
+      toast({ title: "Error", description: "Failed to print receipt", variant: "destructive" })
+    } finally {
+      setReprintingId(null)
     }
   }
 
@@ -324,34 +440,46 @@ export function TransactionsModal({
                     <span className="font-bold text-lg">
                       {formatCurrency(t.totalAmount, currency)}
                     </span>
-                    {(canManageOrders || canVoid) && t.paymentStatus !== 'voided' && t.paymentStatus !== 'refunded' && (
-                      <div className="flex gap-2">
-                          {canManageOrders && t.paymentStatus === 'paid' && (
-                              <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs border-red-200 hover:bg-red-50 hover:text-red-600"
-                                  onClick={() => handleAction('refund', t)}
-                                  disabled={!!processingId}
-                              >
-                                  {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
-                                  Return
-                              </Button>
-                          )}
-                          {(canVoid || canManageOrders) && ['pending', 'partial', 'paid'].includes(t.paymentStatus) && (
-                              <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs border-orange-200 hover:bg-orange-50 hover:text-orange-600"
-                                  onClick={() => handleAction('void', t)}
-                                  disabled={!!processingId}
-                              >
-                                  {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3 mr-1" />}
-                                  Void
-                              </Button>
-                          )}
-                      </div>
-                    )}
+                    <div className="flex gap-2">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => handleReprint(t)}
+                            disabled={!!reprintingId}
+                        >
+                            {reprintingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Printer className="h-3 w-3 mr-1" />}
+                            Reprint
+                        </Button>
+                        {(canManageOrders || canVoid) && t.paymentStatus !== 'voided' && t.paymentStatus !== 'refunded' && (
+                          <>
+                            {canManageOrders && t.paymentStatus === 'paid' && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-red-200 hover:bg-red-50 hover:text-red-600"
+                                    onClick={() => handleAction('refund', t)}
+                                    disabled={!!processingId}
+                                >
+                                    {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3 mr-1" />}
+                                    Return
+                                </Button>
+                            )}
+                            {(canVoid || canManageOrders) && ['pending', 'partial', 'paid'].includes(t.paymentStatus) && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-orange-200 hover:bg-orange-50 hover:text-orange-600"
+                                    onClick={() => handleAction('void', t)}
+                                    disabled={!!processingId}
+                                >
+                                    {processingId === t.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3 mr-1" />}
+                                    Void
+                                </Button>
+                            )}
+                          </>
+                        )}
+                    </div>
                   </div>
                 </div>
               ))
